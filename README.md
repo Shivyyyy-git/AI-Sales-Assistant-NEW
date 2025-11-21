@@ -50,7 +50,7 @@ npm install
 **Backend** (`backend/.env`):
 ```bash
 GEMINI_API_KEY=your_gemini_api_key
-GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
+GOOGLE_SPREADSHEET_ID=1y3gAWKmK7wBOEZAPRistz1poyfvm9HFUMl1NzBaWQSY
 GOOGLE_SERVICE_ACCOUNT_FILE=capstone-project-478823-fe31a45bfcf6.json
 DATA_FILE=DataFile_students_OPTIMIZED.xlsx
 FRONTEND_ORIGIN=http://localhost:3000

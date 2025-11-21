@@ -15,6 +15,7 @@ services:
   - type: web
     name: ai-sales-assistant-frontend
     env: static
+    rootDirectory: frontend
     buildCommand: npm run build
     staticPublishPath: ./dist
     envVars:

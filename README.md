@@ -25,69 +25,52 @@
 
 ---
 
-## 📱 **Interface Preview**
+## 📸 **Live Dashboard Screenshots**
 
 <div align="center">
 
 ### **🏠 Main Dashboard**
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 🏢 AI Senior Living Sales Assistant                           │
-├─────────────────────────────────────────────────────────────────┤
-│ ┌─ Client Profile ──────────────────┐ ┌─ Live Transcription ──┐ │
-│ │ 👤 Name: Margaret Thompson        │ │ 💬 AI: Hello! I'd be   │ │
-│ │ 💰 Budget: $6,000/month          │ │     happy to help you   │ │
-│ │ 📍 Location: Rochester, NY       │ │     find the perfect    │ │
-│ │ 🏥 Care Level: Assisted Living    │ │     senior community.   │ │
-│ │ ⏰ Timeline: Within 3 months      │ │                        │ │
-│ └───────────────────────────────────┘ │ 👤 Client: I'm looking  │ │
-│                                       │     for assisted living │ │
-│ ┌─ AI Recommendations ──────────────┐ │     for my mother...    │ │
-│ │ 🥇 Community A - $5,800/mo        │ │                        │ │
-│ │ 🥈 Community B - $6,200/mo        │ │ 💭 Suggested: Ask about │ │
-│ │ 🥉 Community C - $5,900/mo        │ │     budget preferences  │ │
-│ └───────────────────────────────────┘ └────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-```
+<img src="screenshots/dashboard-main.png" alt="AI Sales Assistant Main Dashboard" width="800">
+
+*Professional dashboard showing client profiles, live transcription, AI recommendations, and CRM integration*
 
 ### **💬 Live Consultation Mode**
-```
-┌─ AI Consultation Active ──────────────────────────────────────┐
-│ 🎙️ Recording... | 🔴 Live | ⏸️ Pause | 🛑 End Call              │
-│                                                                 │
-│ 💭 AI Guidance: "Client mentioned family nearby - great        │
-│    opportunity to build rapport!"                               │
-│                                                                 │
-│ 🔍 Suggested Questions:                                        │
-│ • What's your monthly budget range?                            │
-│ • Any specific care requirements?                              │
-│ • When are you looking to move?                                │
-│                                                                 │
-│ 📊 Real-time Analysis: 8/10 profile complete                   │
-└─────────────────────────────────────────────────────────────────┘
-```
+<img src="screenshots/live-consultation.png" alt="Live AI Consultation Interface" width="800">
+
+*Real-time AI conversation with automatic transcription, recording controls, and intelligent guidance*
 
 ### **📊 8-Dimensional Analysis**
-```
-┌─ Community Match Analysis ────────────────────────────────────┐
-│ 🏆 TOP RECOMMENDATION: Sunset Gardens                         │
-│                                                              │
-│ 📈 8-DIMENSIONAL BREAKDOWN:                                  │
-│                                                              │
-│ 💰 Budget Efficiency: 95% match ($5,800 vs $6,000 budget)    │
-│ 📍 Distance: 2.3 miles from preferred location               │
-│ 🏥 Care Level: Perfect match - Assisted Living available      │
-│ 🏠 Amenities: Pool, garden, transportation included          │
-│ ⏰ Availability: Immediate openings available                 │
-│ 👥 Couple Friendly: 2-person suites available                │
-│ ♿ Accessibility: Full wheelchair accessibility               │
-│ 🏆 Business Value: High commission rate partner              │
-│                                                              │
-│ 🎯 OVERALL SCORE: 9.2/10                                      │
-└─────────────────────────────────────────────────────────────────┘
-```
+<img src="screenshots/analysis-modal.png" alt="8-Dimensional Community Analysis" width="800">
+
+*Detailed breakdown showing why each senior community matches the client perfectly*
 
 </div>
+
+### **📱 Mobile Responsive**
+<img src="screenshots/mobile-view.png" alt="Mobile Dashboard View" width="300">
+
+*Fully responsive design works seamlessly on tablets and mobile devices*
+
+---
+
+## 📖 **How to Take Screenshots**
+
+To update these screenshots with your current application:
+
+1. **Start your application:**
+   ```bash
+   ./start.sh
+   ```
+
+2. **Take screenshots** (macOS: `Cmd+Shift+4`, Windows: `Win+Shift+S`)
+
+3. **Save images** to `screenshots/` folder:
+   - `screenshots/dashboard-main.png` - Main dashboard view
+   - `screenshots/live-consultation.png` - During an active call
+   - `screenshots/analysis-modal.png` - Analysis modal open
+   - `screenshots/mobile-view.png` - Mobile/tablet view
+
+4. **Upload to GitHub** and they'll appear automatically!
 
 ---
 

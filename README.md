@@ -29,15 +29,15 @@
 
 <div align="center">
 
-### **🏠 Main Dashboard**
-<img src="screenshots/dashboard-main.png" alt="AI Sales Assistant Main Dashboard" width="800">
-
-*Professional dashboard showing client profiles, live transcription, AI recommendations, and CRM integration*
-
-### **💬 Live Consultation Mode**
+### **💬 Live AI Consultation** *(Main Feature)*
 <img src="screenshots/live-consultation.png" alt="Live AI Consultation Interface" width="800">
 
-*Real-time AI conversation with automatic transcription, recording controls, and intelligent guidance*
+*Experience real-time AI conversations with automatic transcription, intelligent guidance, and live client matching*
+
+### **🏠 Professional Dashboard**
+<img src="screenshots/dashboard-main.png" alt="AI Sales Assistant Main Dashboard" width="800">
+
+*Comprehensive dashboard with client profiles, live transcription, AI recommendations, and CRM integration*
 
 ### **📊 8-Dimensional Analysis**
 <img src="screenshots/analysis-modal.png" alt="8-Dimensional Community Analysis" width="800">

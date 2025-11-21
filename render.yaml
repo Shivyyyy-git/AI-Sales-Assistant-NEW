@@ -15,7 +15,7 @@ services:
   - type: web
     name: ai-sales-assistant-frontend
     env: static
-    buildCommand: cd frontend && npm run build
+    buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_GEMINI_API_KEY

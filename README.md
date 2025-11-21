@@ -43,6 +43,19 @@
 
 ---
 
+## 📊 **View the CRM**
+
+<div align="center">
+
+### **🔗 Access Your Live CRM Dashboard**
+**[👉 View CRM Dashboard](https://docs.google.com/spreadsheets/d/1y3gAWKmK7wBOEZAPRistz1poyfvm9HFUMl1NzBaWQSY/edit?gid=911061880#gid=911061880)**
+
+*Real-time client consultations, lead tracking, and performance analytics - all automatically updated by the AI system*
+
+</div>
+
+---
+
 ## 🎯 **Key Features**
 
 ### **🤖 AI-Powered Consultation**

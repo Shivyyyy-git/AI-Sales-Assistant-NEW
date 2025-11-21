@@ -10,7 +10,7 @@
 
 **Transform senior living consultations with AI-powered client matching and real-time CRM integration**
 
-[🎯 Live Demo](#) • [📖 Documentation](#setup) • [🔧 Quick Start](#quick-start)
+[🎯 Live Demo (Coming Soon)](https://www.youtube.com/watch?v=dQw4w9WgXcQ) • [📖 Documentation](#setup) • [🔧 Quick Start](#quick-start)
 
 </div>
 
@@ -25,24 +25,67 @@
 
 ---
 
-## 📸 **Live Dashboard Preview**
+## 📱 **Interface Preview**
 
 <div align="center">
 
 ### **🏠 Main Dashboard**
-![Dashboard Preview](https://via.placeholder.com/800x400/4A90E2/FFFFFF?text=AI+Sales+Dashboard+Preview)
-
-*Clean, professional interface with client profiles, live transcription, and real-time recommendations*
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 🏢 AI Senior Living Sales Assistant                           │
+├─────────────────────────────────────────────────────────────────┤
+│ ┌─ Client Profile ──────────────────┐ ┌─ Live Transcription ──┐ │
+│ │ 👤 Name: Margaret Thompson        │ │ 💬 AI: Hello! I'd be   │ │
+│ │ 💰 Budget: $6,000/month          │ │     happy to help you   │ │
+│ │ 📍 Location: Rochester, NY       │ │     find the perfect    │ │
+│ │ 🏥 Care Level: Assisted Living    │ │     senior community.   │ │
+│ │ ⏰ Timeline: Within 3 months      │ │                        │ │
+│ └───────────────────────────────────┘ │ 👤 Client: I'm looking  │ │
+│                                       │     for assisted living │ │
+│ ┌─ AI Recommendations ──────────────┐ │     for my mother...    │ │
+│ │ 🥇 Community A - $5,800/mo        │ │                        │ │
+│ │ 🥈 Community B - $6,200/mo        │ │ 💭 Suggested: Ask about │ │
+│ │ 🥉 Community C - $5,900/mo        │ │     budget preferences  │ │
+│ └───────────────────────────────────┘ └────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### **💬 Live Consultation Mode**
-![Live Call Interface](https://via.placeholder.com/800x400/2D3748/FFFFFF?text=Live+AI+Consultation)
-
-*Real-time AI conversation with automatic transcription and instant client insights*
+```
+┌─ AI Consultation Active ──────────────────────────────────────┐
+│ 🎙️ Recording... | 🔴 Live | ⏸️ Pause | 🛑 End Call              │
+│                                                                 │
+│ 💭 AI Guidance: "Client mentioned family nearby - great        │
+│    opportunity to build rapport!"                               │
+│                                                                 │
+│ 🔍 Suggested Questions:                                        │
+│ • What's your monthly budget range?                            │
+│ • Any specific care requirements?                              │
+│ • When are you looking to move?                                │
+│                                                                 │
+│ 📊 Real-time Analysis: 8/10 profile complete                   │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### **📊 8-Dimensional Analysis**
-![Analysis Modal](https://via.placeholder.com/800x400/48BB78/FFFFFF?text=8D+Recommendation+Analysis)
-
-*Detailed breakdown of why each community matches your client perfectly*
+```
+┌─ Community Match Analysis ────────────────────────────────────┐
+│ 🏆 TOP RECOMMENDATION: Sunset Gardens                         │
+│                                                              │
+│ 📈 8-DIMENSIONAL BREAKDOWN:                                  │
+│                                                              │
+│ 💰 Budget Efficiency: 95% match ($5,800 vs $6,000 budget)    │
+│ 📍 Distance: 2.3 miles from preferred location               │
+│ 🏥 Care Level: Perfect match - Assisted Living available      │
+│ 🏠 Amenities: Pool, garden, transportation included          │
+│ ⏰ Availability: Immediate openings available                 │
+│ 👥 Couple Friendly: 2-person suites available                │
+│ ♿ Accessibility: Full wheelchair accessibility               │
+│ 🏆 Business Value: High commission rate partner              │
+│                                                              │
+│ 🎯 OVERALL SCORE: 9.2/10                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 </div>
 

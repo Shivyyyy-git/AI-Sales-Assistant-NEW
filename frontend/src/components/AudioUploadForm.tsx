@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 
 interface AudioUploadFormProps {
-  onResults: (results: any) => void;
+  onResults: (results: Record<string, unknown>) => void;
   apiBaseUrl: string;
 }
 
@@ -69,10 +69,10 @@ export const AudioUploadForm: React.FC<AudioUploadFormProps> = ({ onResults, api
       onResults(result);
       setProcessingState('success');
       setStatusMessage('Audio processed successfully. Recommendations updated!');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Processing failed:', error);
       setProcessingState('error');
-      setStatusMessage(error?.message || 'Failed to process audio. Please try again.');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to process audio. Please try again.');
     }
   };
 

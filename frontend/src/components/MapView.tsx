@@ -4,7 +4,7 @@ import { Community } from '../types';
 
 // Since we are not using a bundler with types for Leaflet,
 // we need to declare the 'L' global variable to satisfy TypeScript.
-declare const L: any;
+declare const L: Record<string, unknown>;
 
 interface MapViewProps {
   communities: Community[];
@@ -12,8 +12,8 @@ interface MapViewProps {
 
 const MapView: React.FC<MapViewProps> = ({ communities }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any | null>(null);
-  const markersRef = useRef<any[]>([]);
+  const mapRef = useRef<Record<string, unknown> | null>(null);
+  const markersRef = useRef<Record<string, unknown>[]>([]);
 
   // Initialize map effect
   useEffect(() => {

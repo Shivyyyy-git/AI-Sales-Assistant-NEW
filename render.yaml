@@ -3,7 +3,7 @@ services:
     name: ai-sales-assistant-backend
     env: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: python app.py
+    startCommand: cd backend && python app.py
     envVars:
       - key: GEMINI_API_KEY
         sync: false

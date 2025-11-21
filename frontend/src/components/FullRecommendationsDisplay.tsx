@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 interface FullRecommendationsDisplayProps {
-  results: any;
+  results: Record<string, unknown> | null;
 }
 
 const formatCurrency = (value?: number | string | null, digits = 0) => {
@@ -20,10 +20,6 @@ const formatCurrency = (value?: number | string | null, digits = 0) => {
   });
 };
 
-const formatMiles = (value?: number | null) => {
-  if (typeof value !== 'number') return '—';
-  return `${value.toFixed(1)} mi`;
-};
 
 const DIMENSION_LABELS: Record<string, string> = {
   business_reason: 'Business Priority',
@@ -41,6 +37,7 @@ export const FullRecommendationsDisplay: React.FC<FullRecommendationsDisplayProp
   const hasData = recommendations.length > 0;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = recommendations[selectedIndex] || null;
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const dimensionEntries = useMemo(() => {
     if (!selected?.explanations || !selected?.rankings) return [];
@@ -60,7 +57,10 @@ export const FullRecommendationsDisplay: React.FC<FullRecommendationsDisplayProp
   useEffect(() => {
     if (selectedIndex >= recommendations.length) {
       setSelectedIndex(0);
+      setIsExpanded(false);
+      return;
     }
+    setIsExpanded(false);
   }, [recommendations.length, selectedIndex]);
 
   if (!hasData) {
@@ -109,7 +109,7 @@ export const FullRecommendationsDisplay: React.FC<FullRecommendationsDisplayProp
         <div className="xl:w-44 flex-shrink-0">
           <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Ranked Matches</div>
           <div className="flex xl:flex-col gap-3 overflow-x-auto xl:overflow-y-auto pb-1">
-            {recommendations.map((rec: any, index: number) => (
+            {recommendations.map((rec: Record<string, unknown>, index: number) => (
               <button
                 key={rec.community_id || index}
                 onClick={() => setSelectedIndex(index)}
@@ -129,10 +129,10 @@ export const FullRecommendationsDisplay: React.FC<FullRecommendationsDisplayProp
 
         {selected ? (
           <div className="flex-1 min-h-0 flex flex-col rounded-2xl border border-gray-100 bg-white shadow-inner">
-            <div className="border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-              <div>
+            <div className="border-b border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-xs uppercase text-gray-500">Currently Viewing</p>
-                <h4 className="text-lg font-semibold text-gray-900">
+                <h4 className="text-lg font-semibold text-gray-900 truncate">
                   {selected.community_name || `Community ${selected.community_id || selectedIndex + 1}`}
                 </h4>
               </div>
@@ -141,18 +141,43 @@ export const FullRecommendationsDisplay: React.FC<FullRecommendationsDisplayProp
                 <p>{selected.key_metrics?.est_waitlist || 'Availability N/A'}</p>
               </div>
             </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 text-sm text-gray-600">
-              {dimensionEntries.map(entry => (
-                <div key={entry.key} className="rounded-xl bg-gray-50 border border-gray-100 p-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="font-semibold text-gray-800">{entry.label}</p>
-                    <span className="text-xs font-semibold text-blue-600">{entry.rank}</span>
-                  </div>
-                  <p>{entry.explanation}</p>
-        </div>
-      ))}
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+              <p className="text-sm text-gray-600">
+                {isExpanded
+                  ? 'Viewing 8-Dimensional rationale'
+                  : 'Expand to see the full 8-Dimensional ranking insights.'}
+              </p>
+              <button
+                onClick={() => setIsExpanded(prev => !prev)}
+                className="inline-flex items-center rounded-xl border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+              >
+                {isExpanded ? 'Hide Ranking Details' : 'View Ranking Details'}
+              </button>
             </div>
+
+            {isExpanded ? (
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 text-sm text-gray-600">
+                {dimensionEntries.map(entry => (
+                  <div key={entry.key} className="rounded-xl bg-gray-50 border border-gray-100 p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="font-semibold text-gray-800">{entry.label}</p>
+                      <span className="text-xs font-semibold text-blue-600">{entry.rank}</span>
+                    </div>
+                    <p>{entry.explanation}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center px-6 text-center text-sm text-gray-500">
+                <p className="mb-2 font-semibold text-gray-700">
+                  8-Dimensional ranking condensed
+                </p>
+                <p>
+                  Click &ldquo;View Ranking Details&rdquo; to expand the full rationale for this community across
+                  business, cost, distance, availability, budget efficiency, amenity fit, and holistic fit.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex-1 rounded-2xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-500">

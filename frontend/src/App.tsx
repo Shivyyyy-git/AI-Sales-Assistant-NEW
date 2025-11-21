@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, FunctionDeclaration, Type, Blob } from '@google/genai';
-import { CallStatus, ClientProfile, Recommendation, TranscriptionEntry, CallSummary, Community, User, SupportedLanguage } from './types';
+import { CallStatus, ClientProfile, Recommendation, TranscriptionEntry, CallSummary, Community, User, SupportedLanguage, AnalysisResult, BackendRecommendation, ClientProfileSource } from './types';
 import ClientProfileCard from './components/ClientProfileCard';
 import RecommendationsCard from './components/RecommendationsCard';
 import CallControls from './components/CallControls';
@@ -13,7 +13,8 @@ import DatabaseManagementCard from './components/DatabaseManagementCard';
 import CommunityFormModal from './components/CommunityFormModal';
 import { AudioUploadForm } from './components/AudioUploadForm';
 import { TextConsultationForm } from './components/TextConsultationForm';
-import { FullRecommendationsDisplay } from './components/FullRecommendationsDisplay';
+import { ManualEntryModal } from './components/ManualEntryModal';
+import { RecommendationAnalysisModal } from './components/RecommendationAnalysisModal';
 import { USERS_DATA } from './data/users.data';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -93,7 +94,43 @@ const MIN_SPEECH_THRESHOLD = 0.0007; // Lowered for better speech detection sens
 const MAX_SILENCE_BEFORE_DROP = 2200;
 const END_TURN_SILENCE_MS = 150; // 150ms of silence - ultra-responsive conversational flow
 const END_TURN_CONFIRMATION_MS = 150; // Send endOfTurn multiple times for reliability (increased window)
-const INFO_HUB_HEIGHT = 'calc(100vh - 360px)';
+type EnhancedMediaTrackConstraints = MediaTrackConstraints & { voiceIsolation?: boolean };
+type MediaTrackSupportedConstraintsWithVoiceIsolation = MediaTrackSupportedConstraints & { voiceIsolation?: boolean };
+
+type LiveSession = {
+  sendRealtimeInput: (input: { media?: Blob; endOfTurn?: boolean }) => void;
+  sendToolResponse: (payload: { functionResponses: { id: string; name: string; response: Record<string, unknown> } }) => void;
+  close: () => Promise<void>;
+};
+
+type ApiCommunityRecord = {
+  CommunityID: number;
+  ZIP: string | number;
+  'Care Level'?: string;
+  'Monthly Fee'?: number;
+  'Work with Placement?'?: string;
+  'Est. Waitlist Length'?: string;
+};
+
+type CommunitiesResponse = {
+  communities: ApiCommunityRecord[];
+};
+
+type UpdateDashboardArgs = {
+  clientProfile?: ClientProfileSource;
+  suggestedQuestions?: string[];
+  communityRecommendations?: BackendRecommendation[];
+  agentGuidance?: string[];
+};
+
+declare global {
+  interface Window {
+    GEMINI_API_KEY?: string;
+    __keepAliveInterval?: number | null;
+    __audioFallbackInterval?: number | null;
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
 
 // Audio Helper Functions
 const encode = (bytes: Uint8Array) => {
@@ -165,7 +202,9 @@ export default function App() {
   const [showVisionPanel, setShowVisionPanel] = useState(false);
 
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.IDLE);
-  const [isAgentAssistMode, setIsAgentAssistMode] = useState(false);
+  const [isAiMuted, setIsAiMuted] = useState(false);
+  const isAiMutedRef = useRef(false);
+  const isAgentAssistMode = isAiMuted;
   const [isCallPaused, setIsCallPaused] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en');
   const [clientProfile, setClientProfile] = useState<ClientProfile>({});
@@ -175,11 +214,13 @@ export default function App() {
   const [transcription, setTranscription] = useState<TranscriptionEntry[]>([]);
   const [history, setHistory] = useState<CallSummary[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
-  const [analysisResults, setAnalysisResults] = useState<any>(null);
+  const [analysisResults, setAnalysisResults] = useState<AnalysisResult | null>(null);
   const [showClientEmailModal, setShowClientEmailModal] = useState(false);
   const [showManagerEmailModal, setShowManagerEmailModal] = useState(false);
   const [showTextModal, setShowTextModal] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
+  const [showManualEntryModal, setShowManualEntryModal] = useState(false);
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   
   const transcriptionStateRef = useRef<Record<'user' | 'model', TranscriptionTracker>>({
     user: { ...INITIAL_TRANSCRIPTION_TRACKING.user },
@@ -217,7 +258,7 @@ export default function App() {
     
     // Filter out non-English characters (Hindi, etc.) - only allow English letters, numbers, punctuation, and spaces
     // This ensures we only display English transcriptions
-    const englishOnlyRegex = /[^\x00-\x7F]/g; // Matches non-ASCII characters
+    const englishOnlyRegex = /[^ -~]/g; // Matches non-ASCII characters
     const filteredText = rawText.replace(englishOnlyRegex, '');
     
     // Skip if filtered text is empty
@@ -313,16 +354,16 @@ export default function App() {
     transcriptionStateRef.current[speaker] = { lastText: text, updatedAt: now };
   }, []);
 
-const safeString = (value?: any): string | undefined => {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length ? trimmed : undefined;
+const safeString = (value?: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
   }
-  return undefined;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
 };
 
-const normalizeClientProfile = (source?: any): ClientProfile => {
-  if (!source || typeof source !== 'object') return {};
+const normalizeClientProfile = (source?: ClientProfileSource): ClientProfile => {
+  if (!source) return {};
   const budgetValue = source.budget ?? source.client_budget ?? source.monthlyBudget;
   let budget: string | undefined;
   if (typeof budgetValue === 'number') {
@@ -354,7 +395,7 @@ const normalizeClientProfile = (source?: any): ClientProfile => {
   };
 };
 
-const handleAnalysisResults = useCallback((result: any, source: 'analysis' | 'live' = 'analysis') => {
+const handleAnalysisResults = useCallback((result: AnalysisResult | null, source: 'analysis' | 'live' = 'analysis') => {
     if (!result) return;
 
     setAnalysisResults(result);
@@ -363,8 +404,10 @@ const handleAnalysisResults = useCallback((result: any, source: 'analysis' | 'li
     const normalizedProfile = normalizeClientProfile(clientInfo);
     setClientProfile(normalizedProfile);
 
-    const backendRecommendations = Array.isArray(result.recommendations) ? result.recommendations : [];
-    const formattedRecommendations: Recommendation[] = backendRecommendations.map((rec: any, index: number) => {
+    const backendRecommendations: BackendRecommendation[] = Array.isArray(result.recommendations)
+      ? result.recommendations
+      : [];
+    const formattedRecommendations: Recommendation[] = backendRecommendations.map((rec, index) => {
       const monthlyFee = rec.key_metrics?.monthly_fee;
       const careLevel = rec.key_metrics?.care_level;
       const zip = rec.key_metrics?.zip_code;
@@ -383,12 +426,10 @@ const handleAnalysisResults = useCallback((result: any, source: 'analysis' | 'li
         price:
           typeof monthlyFee === 'number'
             ? `$${monthlyFee.toLocaleString()}`
-            : typeof rec.price === 'string'
-            ? rec.price
-            : undefined,
-        address: zip ? `ZIP ${zip}` : rec.address,
-        description: rec.explanations?.business_reason || rec.description || 'Generated via AI ranking engine.',
-        careLevels: careLevel ? [careLevel] : rec.careLevels,
+            : safeString(rec.price) ?? undefined,
+        address: zip ? `ZIP ${zip}` : safeString(rec.address),
+        description: rec.explanations?.business_reason || safeString(rec.description) || 'Generated via AI ranking engine.',
+        careLevels: careLevel ? [careLevel] : rec.careLevels || [],
         amenities: rec.amenities || [],
       };
     });
@@ -410,14 +451,11 @@ const handleAnalysisResults = useCallback((result: any, source: 'analysis' | 'li
   const [summaryText, setSummaryText] = useState('');
   const [view, setView] = useState<'dashboard' | 'database'>('dashboard');
 
-  const sessionRef = useRef<any | null>(null);
-  const socketRef = useRef<any | null>(null);
+  const sessionRef = useRef<LiveSession | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | AudioWorkletNode | AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordChunksRef = useRef<BlobPart[]>([]);
   const sourcesRef = useRef(new Set<AudioBufferSourceNode>());
   const nextStartTimeRef = useRef(0);
   const isCallPausedRef = useRef(false);
@@ -490,60 +528,28 @@ ${selectedLanguage === 'en' ? `
 **Available Communities Knowledge Base (Simulating ~50,000 facilities):**
 ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListString]);
 
-const AGENT_ASSIST_SYSTEM_INSTRUCTION = useMemo(() => `You are the "AI Senior Living Placement Assistant" in **Agent Assist Mode**. You are a silent partner for a human consultant on a live call. Your primary role is to listen to the client and provide text-based guidance, suggestions, and data points to the human consultant on their dashboard. **You MUST NOT generate any spoken audio response.**
-
-**CRITICAL LANGUAGE REQUIREMENT - ABSOLUTE ENFORCEMENT:**
-${selectedLanguage === 'en' ? `
-- You MUST ONLY listen to and transcribe speech in English (en-US)
-- DO NOT transcribe ANY non-English speech (Hindi, Spanish, Chinese, etc.) - completely ignore it
-- DO NOT respond to non-English input - treat it as if nothing was said
-- If you detect non-English speech, DO NOT transcribe it - wait for English input
-- All transcriptions MUST be in English characters ONLY (ASCII characters 0-127)
-- All your text-based guidance and dashboard updates must be exclusively in English
-- If the user speaks in another language, silently ignore it and wait for English speech
-- NEVER output Hindi, Spanish, or any other language characters - ONLY English
-- The input audio transcription is set to English - respect this absolutely
-- Filter out any non-ASCII characters from transcriptions before displaying them
-` : `
-- You must ONLY listen to and transcribe speech in ${languageNames[selectedLanguage]}
-- Completely ignore any speech that is not in ${languageNames[selectedLanguage]}
-- All your text-based guidance and dashboard updates must be exclusively in ${languageNames[selectedLanguage]}
-`}
-
-**Core Directives:**
-1.  **Listen and Analyze:** Transcribe the client's speech accurately.
-2.  **Provide Text Guidance:** Instead of speaking, your output will be text-only suggestions for the agent. This includes:
-    *   **Update Dashboard:** Use the 'updateDashboard' function when you have NEW information to share. Only call it when there are genuine updates, not on every message.
-    *   **Provide Actionable Guidance:** Offer 2-3 concise coaching tips via \`agentGuidance\`. Identify opportunities for upselling, rapport building, or clarifying inconsistencies. Examples: "Client mentioned their daughter lives nearby, great rapport-building opportunity!" or "Budget seems flexible, probe for potential upsell to a premium suite."
-    *   **Suggest Questions:** Provide 2-3 high-priority unanswered questions via \`suggestedQuestions\`. Don't repeat questions the client has already answered.
-3.  **Generate & Refine Recommendations Wisely**: Generate initial recommendations when you have enough information (at least location OR care level). Refine recommendations when you learn significant new details (budget change, care level clarification, mobility requirements). Don't update recommendations for minor conversation filler. Prioritize: location, budget, wheelchair accessibility, partner status, and 'Immediate' availability for urgent timelines.
-4.  **Be Concise:** Keep your text guidance brief and to the point. The agent is on a live call and needs information quickly.
-
-**Available Communities Knowledge Base (Simulating ~50,000 facilities):**
-${communitiesListString}`, [selectedLanguage, languageNames, communitiesListString]);
-
   const fetchCommunities = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/communities`);
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
-      const data = await response.json();
-      const mappedCommunities = data.communities.map((c: any) => ({
+      const data: CommunitiesResponse = await response.json();
+      const mappedCommunities = data.communities.map((c: ApiCommunityRecord) => ({
         id: c.CommunityID,
         name: `Community ${c.CommunityID}`,
         location: `ZIP ${c.ZIP}`,
         address: `${c.ZIP}, USA`,
-        description: `A community offering ${c['Care Level']}`,
+        description: c['Care Level'] ? `A community offering ${c['Care Level']}` : 'Community entry',
         careLevels: c['Care Level'] ? [c['Care Level']] : [],
-        basePrice: c['Monthly Fee'] || 0,
+        basePrice: typeof c['Monthly Fee'] === 'number' ? c['Monthly Fee'] : 0,
         pricingDetails: `Starts at $${c['Monthly Fee'] || 0}`,
         isPartner: c['Work with Placement?'] === 'Yes',
-        amenities: [], // This data is not in the excel file
-        lat: 0, // This data is not in the excel file
-        lng: 0, // This data is not in the excel file
-        wheelchairAccessible: true, // Assuming default
-        hasKitchen: false, // Assuming default
+        amenities: [],
+        lat: 0,
+        lng: 0,
+        wheelchairAccessible: true,
+        hasKitchen: false,
         availability: c['Est. Waitlist Length'] === 'Available' ? 'Immediate' : 'Waitlist',
       }));
       setCommunities(mappedCommunities);
@@ -573,7 +579,6 @@ ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListStri
       setSuggestedQuestions([]);
       setAgentGuidance([]);
       applyTranscriptionSnapshot([]);
-      setIsAgentAssistMode(false);
       resetAudioTracking();
   }, [applyTranscriptionSnapshot, resetAudioTracking]);
 
@@ -646,15 +651,73 @@ ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListStri
 
   const handlePushToGoogleSheet = async () => {
     try {
+      // Validate that we have data to push
+      if (!clientProfile || Object.keys(clientProfile).length === 0) {
+        alert('Error: No client profile data available. Please gather client information first.');
+        return;
+      }
+
+      if (!recommendations || recommendations.length === 0) {
+        alert('Error: No recommendations available. Please generate recommendations first.');
+        return;
+      }
+
       const summary = generateSummaryText();
+
+      // Format recommendations to include required ranking structure for Google Sheets
+      const formattedRecommendations = recommendations.map((rec, index) => ({
+        name: rec.name,
+        reason: rec.reason,
+        price: rec.price,
+        address: rec.address,
+        description: rec.description,
+        careLevels: rec.careLevels,
+        amenities: rec.amenities,
+        // Add required ranking structure for Google Sheets compatibility
+        final_rank: index + 1,
+        community_id: `live_call_${index + 1}`,
+        combined_rank_score: (index + 1) * 10, // Simple ranking for live calls
+        key_metrics: {
+          monthly_fee: rec.price ? parseInt(rec.price.replace(/[^0-9]/g, '')) || 0 : 0,
+          distance_miles: 0, // Not available in live calls
+          est_waitlist: 'Available',
+          care_level: rec.careLevels?.[0] || '',
+          zip_code: rec.address?.replace(/\D/g, '') || undefined,
+        },
+        rankings: {
+          business_rank: null,
+          total_cost_rank: null,
+          distance_rank: null,
+          availability_rank: null,
+          budget_efficiency_rank: null,
+          couple_rank: null,
+          amenity_rank: null,
+          holistic_rank: index + 1,
+        },
+        explanations: {
+          business_reason: null,
+          total_cost_reason: null,
+          distance_reason: null,
+          availability_reason: null,
+          budget_efficiency_reason: null,
+          couple_reason: null,
+          amenity_reason: null,
+          holistic_reason: rec.reason || 'Recommended based on client requirements'
+        }
+      }));
+
+      const payload = {
+        clientProfile,
+        recommendations: formattedRecommendations,
+        summary
+      };
+
+      console.log('Pushing to Google Sheets:', payload);
+
       const response = await fetch(`${API_BASE_URL}/api/update-crm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientProfile,
-          recommendations,
-          summary
-        })
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
@@ -662,6 +725,7 @@ ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListStri
         alert(`Successfully pushed to Google Sheet! Consultation ID: ${result.consultation_id}`);
       } else {
         const errorText = await response.text();
+        console.error('Google Sheets push failed:', errorText);
         alert(`Error: Failed to push to Google Sheet. ${errorText}`);
       }
     } catch (error) {
@@ -688,6 +752,48 @@ ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListStri
 
   const handleCloseClientEmailModal = () => setShowClientEmailModal(false);
   const handleCloseManagerEmailModal = () => setShowManagerEmailModal(false);
+
+  const handleManualProfileSave = async (profile: ClientProfile) => {
+    // Update client profile with manually entered data
+    setClientProfile(profile);
+
+    // Generate recommendations based on the manual profile
+    try {
+      // Create a simple text description from the profile for the backend
+      const profileText = `
+Client Name: ${profile.name || 'Unknown'}
+Budget: ${profile.budget || 'Not specified'}
+Location: ${profile.location || 'Not specified'}
+Care Level: ${profile.careLevel || 'Not specified'}
+Timeline: ${profile.timeline || 'Not specified'}
+Mobility Needs: ${profile.mobilityNeeds || 'Not specified'}
+Wheelchair Accessible: ${profile.wheelchairAccessible ? 'Yes' : 'No'}
+Specific Demands: ${profile.specificDemands || 'None'}
+      `.trim();
+
+      const response = await fetch(`${API_BASE_URL}/api/process-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: profileText,
+          language: 'english',
+          push_to_crm: false  // Don't auto-push manual entries
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        handleAnalysisResults(result);
+        alert('Profile saved and recommendations generated!');
+      } else {
+        const errorText = await response.text();
+        alert(`Error generating recommendations: ${errorText}`);
+      }
+    } catch (error) {
+      console.error('Error generating recommendations:', error);
+      alert('Failed to generate recommendations. Please check your backend connection.');
+    }
+  };
 
   const generateClientEmailContent = () => {
     const summary = generateSummaryText();
@@ -732,7 +838,8 @@ ${currentUser.name}`;
     try {
       await navigator.clipboard.writeText(text);
       alert('Email content copied to clipboard!');
-    } catch (err) {
+    } catch (error) {
+      console.warn('[Clipboard] Falling back to legacy copy handler:', error);
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = text;
@@ -745,37 +852,19 @@ ${currentUser.name}`;
   };
 
 
-  const handleStartCall = useCallback(async (isAssistMode = false) => {
-    if(!isAssistMode) {
-        resetState();
-    } else {
-        applyTranscriptionSnapshot([]);
-        resetAudioTracking();
-    }
+  const handleStartCall = useCallback(async () => {
+    resetState();
     setIsCallPaused(false);
     isCallPausedRef.current = false;
     setCallStatus(CallStatus.CONNECTING);
-    setIsAgentAssistMode(isAssistMode);
 
     try {
       // Use Gemini SDK directly like Google Studio
       // Try multiple sources for API key
-      const apiKey = (window as any).GEMINI_API_KEY
-        || (document.querySelector('meta[name="gemini-api-key"]') as HTMLMetaElement)?.content
-        || (process as any)?.env?.GEMINI_API_KEY
-        || (import.meta as any).env?.VITE_GEMINI_API_KEY
-        || (import.meta as any).env?.GEMINI_API_KEY;
-      
-      console.log('========================================');
-      console.log('🔑 GEMINI API KEY CHECK');
-      console.log('========================================');
-      console.log('API Key found:', apiKey ? '✅ YES' : '❌ NO');
-      if (apiKey) {
-        console.log('API Key length:', apiKey.length);
-        console.log('API Key (first 10 chars):', apiKey.substring(0, 10) + '...');
-        console.log('API Key (last 10 chars):', '...' + apiKey.substring(apiKey.length - 10));
-      }
-      console.log('========================================');
+      const apiKey =
+        (import.meta.env.VITE_GEMINI_API_KEY || '').trim() ||
+        window.GEMINI_API_KEY ||
+        (document.querySelector('meta[name="gemini-api-key"]') as HTMLMetaElement)?.content;
       
       if (!apiKey) {
         throw new Error("API key not available");
@@ -786,16 +875,16 @@ ${currentUser.name}`;
       
       // Request microphone access
       console.log('[DEBUG] Requesting microphone access...');
-      const baseAudioConstraints: MediaTrackConstraints = {
+      const baseAudioConstraints: EnhancedMediaTrackConstraints = {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         channelCount: 1,
         sampleRate: 16000,
       };
-      const supportedConstraints = navigator.mediaDevices.getSupportedConstraints();
-      if ((supportedConstraints as any)?.voiceIsolation) {
-        (baseAudioConstraints as MediaTrackConstraints & { voiceIsolation?: boolean }).voiceIsolation = true;
+      const supportedConstraints = navigator.mediaDevices.getSupportedConstraints() as MediaTrackSupportedConstraintsWithVoiceIsolation;
+      if (supportedConstraints.voiceIsolation) {
+        baseAudioConstraints.voiceIsolation = true;
       }
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: baseAudioConstraints,
@@ -816,8 +905,12 @@ ${currentUser.name}`;
       }
 
       // Create audio contexts
-      inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-      outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextConstructor) {
+        throw new Error('Web Audio API not supported in this browser');
+      }
+      inputAudioContextRef.current = new AudioContextConstructor({ sampleRate: 16000 });
+      outputAudioContextRef.current = new AudioContextConstructor({ sampleRate: 24000 });
       
       // Resume audio contexts if suspended (browser requirement)
       if (inputAudioContextRef.current.state === 'suspended') {
@@ -830,12 +923,12 @@ ${currentUser.name}`;
       }
       console.log('[DEBUG] Audio contexts ready. Input state:', inputAudioContextRef.current.state, 'Output state:', outputAudioContextRef.current.state);
       
-      const systemInstruction = isAssistMode ? AGENT_ASSIST_SYSTEM_INSTRUCTION : ACTIVE_AI_SYSTEM_INSTRUCTION;
+      const systemInstruction = ACTIVE_AI_SYSTEM_INSTRUCTION;
 
       console.log(`[DEBUG] Configuring Gemini with language: ${selectedLanguage} (${geminiLanguageCodes[selectedLanguage]})`);
 
       // Store session object directly when promise resolves
-      let sessionObject: any = null;
+      let sessionObject: LiveSession | null = null;
       
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-live-preview',
@@ -992,17 +1085,14 @@ ${currentUser.name}`;
               }
               
               // Calculate audio level with RMS based gating
-              let sum = 0;
               let sumSquares = 0;
               let maxSample = 0;
               for (let i = 0; i < inputData.length; i++) {
                 const sample = inputData[i];
                 const abs = Math.abs(sample);
-                sum += abs;
                 sumSquares += sample * sample;
                 if (abs > maxSample) maxSample = abs;
               }
-              const avgLevel = sum / inputData.length;
               const rmsLevel = Math.sqrt(sumSquares / inputData.length);
               const noiseProfile = noiseProfileRef.current;
               noiseProfile.floor = Math.max(
@@ -1091,14 +1181,15 @@ ${currentUser.name}`;
                   media: pcmBlob,
                   ...(shouldSendEndOfTurnNow ? { endOfTurn: true } : {})
                 });
-              } catch (error: any) {
-                if (error?.message?.includes('CLOSING') || error?.message?.includes('CLOSED')) {
+              } catch (error: unknown) {
+                const err = error as { message?: string };
+                if (err?.message?.includes('CLOSING') || err?.message?.includes('CLOSED')) {
                   console.warn('[DEBUG] Session closed while sending audio');
                   isSessionActiveRef.current = false;
                   return;
                 }
                 console.error('[DEBUG] Could not send audio:', error);
-                console.error('[DEBUG] Error details:', error.message, error.stack);
+                console.error('[DEBUG] Error details:', err?.message);
               }
             };
             
@@ -1210,23 +1301,25 @@ ${currentUser.name}`;
                     const keepAliveData = new Float32Array(4096).fill(0);
                     const keepAliveBlob = createBlob(keepAliveData);
                     currentSession.sendRealtimeInput({ media: keepAliveBlob });
-                  } catch (e: any) {
-                    if (e?.message?.includes('CLOSING') || e?.message?.includes('CLOSED')) {
+                  } catch (e: unknown) {
+                    const err = e as { message?: string };
+                    if (err?.message?.includes('CLOSING') || err?.message?.includes('CLOSED')) {
                       clearInterval(keepAliveInterval);
                       return;
                     }
-                    console.warn('[DEBUG] Keep-alive chunk failed:', e.message);
+                    console.warn('[DEBUG] Keep-alive chunk failed:', err?.message);
                   }
                 }, 50);
                 
                 // Store interval reference for cleanup
-                (window as any).__keepAliveInterval = keepAliveInterval;
-              } catch (e: any) {
+                window.__keepAliveInterval = keepAliveInterval;
+              } catch (e: unknown) {
+                const err = e as { message?: string; stack?: string };
                 console.error('[DEBUG] Failed to send initial chunk:', e);
-                if (e?.message?.includes('CLOSING') || e?.message?.includes('CLOSED')) {
+                if (err?.message?.includes('CLOSING') || err?.message?.includes('CLOSED')) {
                   console.error('[DEBUG] WebSocket already closing - connection failed');
                 } else {
-                  console.error('[DEBUG] Error details:', e.message, e.stack);
+                  console.error('[DEBUG] Error details:', err?.message, err?.stack);
                 }
               }
             };
@@ -1287,7 +1380,7 @@ ${currentUser.name}`;
                 }, 100);
                 
                 // Store interval ID for cleanup
-                (window as any).__audioFallbackInterval = fallbackInterval;
+                window.__audioFallbackInterval = fallbackInterval;
               } else {
                 console.log(`[DEBUG] ✅ Audio capture confirmed - processed ${audioChunkCount} chunks`);
                 console.log(`[DEBUG] ✅ Last chunk received ${timeSinceLastChunk}ms ago`);
@@ -1300,46 +1393,20 @@ ${currentUser.name}`;
               console.log('[DEBUG] ⏸️ Call is paused, ignoring message');
               return;
             }
-            
-            // Log ALL message properties to see what we're receiving
-            console.log('[DEBUG] 📨 Received message type:', typeof message);
-            console.log('[DEBUG] 📨 Full message:', message);
-            try {
-              const msgKeys = Object.keys(message);
-              console.log('[DEBUG] 📋 Message keys:', msgKeys);
-              
-              // Check all possible properties
-              if (message.setupComplete) console.log('[DEBUG] ✅ setupComplete:', message.setupComplete);
-              if (message.serverContent) {
-                console.log('[DEBUG] 📦 serverContent keys:', Object.keys(message.serverContent));
-                console.log('[DEBUG] 📦 Full serverContent:', JSON.stringify(message.serverContent, null, 2));
-              } else {
-                console.log('[DEBUG] ⚠️ serverContent is undefined');
-              }
-              if (message.toolCall) console.log('[DEBUG] 🔧 toolCall:', message.toolCall);
-              if ((message as any).modelTurn) console.log('[DEBUG] 🎤 modelTurn:', (message as any).modelTurn);
-              if ((message as any).inputTranscription) console.log('[DEBUG] 🎙️ inputTranscription:', (message as any).inputTranscription);
-              if ((message as any).outputTranscription) console.log('[DEBUG] 🔊 outputTranscription:', (message as any).outputTranscription);
-            } catch (e) {
-              console.log('[DEBUG] ❌ Error logging message:', e);
-            }
-            
             // Handle setupComplete - session is ready for conversation
             if (message.setupComplete) {
               console.log('[DEBUG] ✅ Setup complete! Session is ready for conversation.');
             }
             
-            // Handle goAway - API is requesting connection closure
-            if ((message as any).goAway) {
-              console.warn('[DEBUG] ⚠️ Received goAway message:', (message as any).goAway);
-              console.warn('[DEBUG] ⚠️ API is requesting connection closure');
-              // Don't close immediately - let onclose handle it
-            }
-            
             if(message.toolCall?.functionCalls) {
               for (const fc of message.toolCall.functionCalls) {
                 if(fc.name === 'updateDashboard' && fc.args) {
-                    const { clientProfile: newProfile, suggestedQuestions: newQuestions, communityRecommendations: newRecs, agentGuidance: newGuidance } = fc.args as any;
+                    const {
+                      clientProfile: newProfile,
+                      suggestedQuestions: newQuestions,
+                      communityRecommendations: newRecs,
+                      agentGuidance: newGuidance,
+                    } = fc.args as UpdateDashboardArgs;
                     
                     if (newProfile) {
                       const normalized = normalizeClientProfile(newProfile);
@@ -1358,27 +1425,19 @@ ${currentUser.name}`;
                     }
                     handleAnalysisResults({
                       client_info: newProfile,
-                      recommendations: Array.isArray(newRecs) ? newRecs.map((rec: any, index: number) => ({
+                      recommendations: Array.isArray(newRecs) ? newRecs.map((rec, index) => ({
                         community_name: rec.name,
                         final_rank: index + 1,
                         combined_rank_score: 0,
                         key_metrics: {
-                          monthly_fee: rec.price ? Number(rec.price.replace(/[^0-9.]/g, '')) : undefined,
-                          distance_miles: rec.distance || undefined,
-                          est_waitlist: rec.availability || undefined,
-                          care_level: rec.careLevels?.[0],
-                          zip_code: rec.address?.replace(/\D/g, '') || undefined,
+                          monthly_fee: rec.key_metrics?.monthly_fee,
+                          distance_miles: rec.key_metrics?.distance_miles,
+                          est_waitlist: rec.key_metrics?.est_waitlist,
+                          care_level: rec.key_metrics?.care_level ?? rec.careLevels?.[0],
+                          zip_code: rec.key_metrics?.zip_code || rec.address?.replace(/\D/g, '') || undefined,
                         },
-                        explanations: {
-                          holistic_reason: rec.reason,
-                          business_reason: null,
-                          total_cost_reason: null,
-                          distance_reason: null,
-                          availability_reason: null,
-                          budget_efficiency_reason: null,
-                          amenity_reason: null,
-                        },
-                        rankings: {
+                        explanations: rec.explanations ?? { holistic_reason: rec.reason },
+                        rankings: rec.rankings ?? {
                           business_rank: null,
                           total_cost_rank: null,
                           distance_rank: null,
@@ -1386,7 +1445,7 @@ ${currentUser.name}`;
                           budget_efficiency_rank: null,
                           amenity_rank: null,
                           holistic_rank: null,
-                        }
+                        },
                       })) : [],
                       performance_metrics: null
                     }, 'live');
@@ -1439,7 +1498,7 @@ ${currentUser.name}`;
               // No action needed as we've already updated with the latest text
             }
              const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-              if (!isAgentAssistMode && base64Audio && outputAudioContextRef.current) {
+              if (!isAiMutedRef.current && base64Audio && outputAudioContextRef.current) {
                 const outputAudioContext = outputAudioContextRef.current;
                 nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContext.currentTime);
 
@@ -1476,7 +1535,7 @@ ${currentUser.name}`;
             alert(`Session error: ${e.message || 'Unknown error'}`);
             handleEndCall();
           },
-          onclose: (event?: any) => {
+          onclose: (event?: CloseEvent) => {
             console.log('[DEBUG] Session closed.');
             isSessionActiveRef.current = false;
             
@@ -1507,13 +1566,13 @@ ${currentUser.name}`;
             }
             
             // Clean up keep-alive interval
-            if ((window as any).__keepAliveInterval) {
-              clearInterval((window as any).__keepAliveInterval);
-              (window as any).__keepAliveInterval = null;
+            if (window.__keepAliveInterval) {
+              clearInterval(window.__keepAliveInterval);
+              window.__keepAliveInterval = null;
             }
           },
         },
-      });
+      }) as Promise<LiveSession>;
       console.log('[DEBUG] Session promise created, waiting for connection...');
       
       // Store session when promise resolves (backup in case onopen doesn't set it)
@@ -1536,184 +1595,14 @@ ${currentUser.name}`;
       setCallStatus(CallStatus.ERROR);
       alert(`Failed to start call: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [ACTIVE_AI_SYSTEM_INSTRUCTION, AGENT_ASSIST_SYSTEM_INSTRUCTION, selectedLanguage, geminiLanguageCodes, resetState, applyTranscriptionSnapshot, resetAudioTracking, updateTranscriptionEntry]);
+  }, [
+    ACTIVE_AI_SYSTEM_INSTRUCTION,
+    selectedLanguage,
+    geminiLanguageCodes,
+    resetState,
+    updateTranscriptionEntry,
+  ]);
 
-  // OLD CODE - KEEP FOR FALLBACK IF NEEDED
-  const handleStartCallOLD = useCallback(async (isAssistMode = false) => {
-    if(!isAssistMode) {
-        resetState();
-    }
-    setIsCallPaused(false);
-    isCallPausedRef.current = false;
-    setCallStatus(CallStatus.CONNECTING);
-    setIsAgentAssistMode(isAssistMode);
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-
-      inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-      outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      
-      const systemInstruction = isAssistMode ? AGENT_ASSIST_SYSTEM_INSTRUCTION : ACTIVE_AI_SYSTEM_INSTRUCTION;
-
-      const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-live-preview',
-        config: {
-          responseModalities: [Modality.AUDIO],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          tools: [{ functionDeclarations: [updateDashboardFunctionDeclaration] }],
-          systemInstruction: systemInstruction,
-        },
-        callbacks: {
-          onopen: () => {
-            setCallStatus(CallStatus.ACTIVE);
-            const source = inputAudioContextRef.current!.createMediaStreamSource(stream);
-            const scriptProcessor = inputAudioContextRef.current!.createScriptProcessor(4096, 1, 1);
-            processorRef.current = scriptProcessor;
-
-            scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
-              if (isCallPausedRef.current) return;
-              if (!sessionRef.current) return; // Session closed
-              const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-              const pcmBlob = createBlob(inputData);
-              sessionPromise.then((session) => {
-                  if (sessionRef.current && session === sessionRef.current) {
-                    try {
-                      session.sendRealtimeInput({ media: pcmBlob });
-                    } catch (error) {
-                      // Session might be closed, ignore
-                      console.debug('Could not send audio (session closed):', error);
-                    }
-                  }
-              }).catch(() => {
-                // Session closed, ignore
-              });
-            };
-            source.connect(scriptProcessor);
-            scriptProcessor.connect(inputAudioContextRef.current!.destination);
-          },
-          onmessage: async (message: LiveServerMessage) => {
-            // Skip processing messages when call is paused
-            if (isCallPausedRef.current) {
-              console.log('[DEBUG] ⏸️ Call is paused, ignoring message');
-              return;
-            }
-            
-            console.log('[DEBUG] Received message:', message);
-            if(message.toolCall?.functionCalls) {
-              for (const fc of message.toolCall.functionCalls) {
-                if(fc.name === 'updateDashboard' && fc.args) {
-                    const { clientProfile: newProfile, suggestedQuestions: newQuestions, communityRecommendations: newRecs, agentGuidance: newGuidance } = fc.args as any;
-                    
-                    setClientProfile(prev => ({...prev, ...(newProfile || {})}));
-                    if(newQuestions) {
-                        setSuggestedQuestions(newQuestions);
-                    }
-                    if(newRecs) {
-                        setRecommendations(newRecs);
-                    }
-                    if (newGuidance) {
-                        setAgentGuidance(newGuidance);
-                    }
-
-                    if (sessionRef.current) {
-                      try {
-                        sessionRef.current.sendToolResponse({
-                          functionResponses: {
-                            id: fc.id,
-                            name: fc.name,
-                            response: { result: "Dashboard updated successfully." }
-                          }
-                        });
-                      } catch (error) {
-                        console.debug('[DEBUG] Could not send tool response:', error);
-                      }
-                    }
-                }
-              }
-            }
-            // Check for input transcription (user speech)
-            // Handle both incremental updates and final transcription
-            if (message.serverContent?.inputTranscription?.text) {
-                const rawText = message.serverContent.inputTranscription.text;
-                if (rawText && typeof rawText === 'string' && rawText.length > 0) {
-                  // Pass raw text without any processing - preserve everything
-                  updateTranscriptionEntry('user', rawText);
-              }
-            }
-            
-            // Check for output transcription (AI speech)
-            // Handle both incremental updates and final transcription
-            if (message.serverContent?.outputTranscription?.text) {
-                const rawText = message.serverContent.outputTranscription.text;
-                if (rawText && typeof rawText === 'string' && rawText.length > 0) {
-                  // Pass raw text without any processing - preserve everything
-                  updateTranscriptionEntry('model', rawText);
-                }
-            }
-            
-            // Handle generationComplete - final transcription is ready
-            if (message.serverContent?.generationComplete) {
-              // Final transcription should already be in the last entry
-              // This event indicates Gemini has finished generating the response
-            }
-            
-            // Handle turnComplete - turn is finished, transcription is final
-            if (message.serverContent?.turnComplete) {
-              // Turn is complete, transcription should be final
-              // No action needed as we've already updated with the latest text
-            }
-             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-              // Don't play audio when paused
-              if (!isAgentAssistMode && base64Audio && outputAudioContextRef.current && !isCallPausedRef.current) {
-                const outputAudioContext = outputAudioContextRef.current;
-                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContext.currentTime);
-
-                const audioBuffer = await decodeAudioData(decode(base64Audio), outputAudioContext, 24000, 1);
-
-                const source = outputAudioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(outputAudioContext.destination);
-
-                source.addEventListener('ended', () => {
-                  sourcesRef.current.delete(source);
-                });
-
-                source.start(nextStartTimeRef.current);
-                nextStartTimeRef.current += audioBuffer.duration;
-                sourcesRef.current.add(source);
-              }
-
-              if (message.serverContent?.interrupted) {
-                for (const source of sourcesRef.current.values()) {
-                  source.stop();
-                  sourcesRef.current.delete(source);
-                }
-                nextStartTimeRef.current = 0;
-              }
-          },
-          onerror: (e: ErrorEvent) => {
-            console.error('Session error:', e);
-            setCallStatus(CallStatus.ERROR);
-            handleEndCall();
-          },
-          onclose: () => {
-            console.log('Session closed.');
-          },
-        },
-      });
-      sessionRef.current = await sessionPromise;
-
-    } catch (error) {
-      console.error('Failed to start call (OLD):', error);
-      setCallStatus(CallStatus.ERROR);
-    }
-  }, [ACTIVE_AI_SYSTEM_INSTRUCTION, AGENT_ASSIST_SYSTEM_INSTRUCTION, selectedLanguage, geminiLanguageCodes, resetState, updateTranscriptionEntry]);
-
-  
 
   const handleEndCall = useCallback((setIdleOnEnd = true) => {
     // Mark session as inactive FIRST to prevent new sends
@@ -1728,7 +1617,7 @@ ${currentUser.name}`;
           if ('disconnect' in processorRef.current) {
             processorRef.current.disconnect();
           }
-        } catch (e) {
+        } catch {
           // Ignore errors when disconnecting
         }
         processorRef.current = null;
@@ -1741,15 +1630,15 @@ ${currentUser.name}`;
     }
     
     // Clear fallback interval if it exists
-    if ((window as any).__audioFallbackInterval) {
-      clearInterval((window as any).__audioFallbackInterval);
-      (window as any).__audioFallbackInterval = null;
+    if (window.__audioFallbackInterval) {
+      clearInterval(window.__audioFallbackInterval);
+      window.__audioFallbackInterval = null;
     }
     
     // Clear keep-alive interval if it exists
-    if ((window as any).__keepAliveInterval) {
-      clearInterval((window as any).__keepAliveInterval);
-      (window as any).__keepAliveInterval = null;
+    if (window.__keepAliveInterval) {
+      clearInterval(window.__keepAliveInterval);
+      window.__keepAliveInterval = null;
     }
     
     // Then close the session
@@ -1787,7 +1676,7 @@ ${currentUser.name}`;
     if (setIdleOnEnd) {
       setCallStatus(CallStatus.IDLE);
     }
-  }, []);
+  }, [resetAudioTracking, resetTranscriptionTracking]);
   
   const handleTogglePause = useCallback(() => {
     if (callStatus !== CallStatus.ACTIVE) return;
@@ -1806,15 +1695,20 @@ ${currentUser.name}`;
     }
   }, [callStatus]);
 
-  const handleToggleAssistMode = useCallback(() => {
+  const handleToggleMute = useCallback(() => {
     if (callStatus !== CallStatus.ACTIVE) return;
-    const newMode = !isAgentAssistMode;
-    setIsAgentAssistMode(newMode);
-  }, [callStatus, isAgentAssistMode]);
-
-  const handleEscalateCall = () => {
-    alert('Call escalated! A manager has been notified and will join shortly.');
-  };
+    const newMode = !isAiMuted;
+    setIsAiMuted(newMode);
+    isAiMutedRef.current = newMode;
+    if (newMode) {
+      // stop any audio currently playing
+      if (outputAudioContextRef.current) {
+        sourcesRef.current.forEach(source => source.stop());
+        sourcesRef.current.clear();
+        nextStartTimeRef.current = 0;
+      }
+    }
+  }, [callStatus, isAiMuted]);
 
   const handleOpenCommunityModal = (community: Community | null) => {
     setCommunityToEdit(community);
@@ -1852,8 +1746,9 @@ ${currentUser.name}`;
         }
         await fetchCommunities(); // Refresh data
         handleCloseCommunityModal();
-    } catch (error: any) {
-        alert(`Error saving community: ${error.message}`);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        alert(`Error saving community: ${message}`);
     }
   };
   
@@ -1866,8 +1761,9 @@ ${currentUser.name}`;
                 throw new Error(err.error || 'Failed to delete community');
             }
             await fetchCommunities(); // Refresh data
-        } catch (error: any) {
-             alert(`Error deleting community: ${error.message}`);
+        } catch (error) {
+             const message = error instanceof Error ? error.message : 'Unknown error';
+             alert(`Error deleting community: ${message}`);
         }
     }
   };
@@ -2237,6 +2133,15 @@ ${currentUser.name}`;
                     </svg>
                     Paste Transcript
                   </button>
+                  <button
+                    onClick={() => setShowManualEntryModal(true)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Manual Entry
+                  </button>
                 </>
               )}
               <CallControls
@@ -2245,9 +2150,9 @@ ${currentUser.name}`;
                 isCallPaused={isCallPaused}
                 selectedLanguage={selectedLanguage}
                 onLanguageChange={setSelectedLanguage}
-                onStart={() => handleStartCall(false)}
+                onStart={handleStartCall}
                 onEnd={() => handleEndCall()}
-                onToggleAssistMode={handleToggleAssistMode}
+                onToggleAssistMode={handleToggleMute}
                 onTogglePause={handleTogglePause}
                 onSaveSummary={handleSaveSummary}
                 hasData={Object.keys(clientProfile).length > 0 || recommendations.length > 0}
@@ -2295,8 +2200,8 @@ ${currentUser.name}`;
               </div>
             </div>
             <div className="space-y-6 lg:col-span-1 flex flex-col min-h-0">
-              <div className="rounded-2xl border border-gray-100 bg-white shadow-sm max-h-[360px] overflow-hidden">
-                <div className="max-h-[360px] overflow-y-auto pr-2">
+              <div className="rounded-2xl border border-gray-100 bg-white shadow-sm max-h-[480px] overflow-hidden">
+                <div className="max-h-[480px] overflow-y-auto pr-2">
                   <ClientProfileCard 
                     profile={clientProfile} 
                     callHistory={history}
@@ -2306,8 +2211,56 @@ ${currentUser.name}`;
                 </div>
               </div>
               <div className="rounded-2xl border border-gray-100 bg-white shadow-sm flex-1 min-h-0 overflow-hidden">
-                <div className="h-full max-h-[420px] overflow-y-auto pr-2">
-                  <FullRecommendationsDisplay results={analysisResults} />
+                <div className="h-full flex items-center justify-center p-8">
+                  <button
+                    onClick={() => setShowAnalysisModal(true)}
+                    disabled={!analysisResults || !analysisResults.recommendations || analysisResults.recommendations.length === 0}
+                    className={`w-full py-8 rounded-2xl border-2 transition-all duration-300 ${
+                      analysisResults && analysisResults.recommendations && analysisResults.recommendations.length > 0
+                        ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 shadow-lg hover:shadow-xl cursor-pointer'
+                        : 'border-dashed border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center gap-4">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                        analysisResults && analysisResults.recommendations && analysisResults.recommendations.length > 0
+                          ? 'bg-blue-600 animate-pulse'
+                          : 'bg-gray-300'
+                      }`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      </div>
+                      <div className="text-center">
+                        <h3 className={`text-xl font-bold ${
+                          analysisResults && analysisResults.recommendations && analysisResults.recommendations.length > 0
+                            ? 'text-blue-900'
+                            : 'text-gray-600'
+                        }`}>
+                          {analysisResults && analysisResults.recommendations && analysisResults.recommendations.length > 0
+                            ? 'View Recommendation Analysis'
+                            : 'Analysis Pending'}
+                        </h3>
+                        <p className={`text-sm mt-2 ${
+                          analysisResults && analysisResults.recommendations && analysisResults.recommendations.length > 0
+                            ? 'text-blue-700'
+                            : 'text-gray-500'
+                        }`}>
+                          {analysisResults && analysisResults.recommendations && analysisResults.recommendations.length > 0
+                            ? 'Click to view detailed 8-dimensional rationale for client and manager review'
+                            : 'Generate recommendations to unlock detailed analysis'}
+                        </p>
+                      </div>
+                      {analysisResults && analysisResults.recommendations && analysisResults.recommendations.length > 0 && (
+                        <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+                          <span>Open Detailed Analysis</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </button>
                 </div>
               </div>
               {analysisResults?.performance_metrics && (
@@ -2419,6 +2372,17 @@ ${currentUser.name}`;
           </div>
         </div>
       )}
+      <ManualEntryModal
+        isOpen={showManualEntryModal}
+        onClose={() => setShowManualEntryModal(false)}
+        onSave={handleManualProfileSave}
+        initialProfile={clientProfile}
+      />
+      <RecommendationAnalysisModal
+        isOpen={showAnalysisModal}
+        onClose={() => setShowAnalysisModal(false)}
+        results={analysisResults}
+      />
        <FeedbackModal
         isOpen={isFeedbackModalOpen}
         onClose={handleCloseFeedbackModal}

@@ -68,3 +68,66 @@ export interface LanguageConfig {
   name: string;
   nativeName: string;
 }
+
+export interface ClientProfileSource {
+  name?: string;
+  client_name?: string;
+  budget?: number | string;
+  client_budget?: number | string;
+  monthlyBudget?: number;
+  specificDemands?: string;
+  special_needs?: {
+    other?: string;
+  };
+  notes?: string;
+  wheelchairAccessible?: boolean;
+  wheelchair_accessible?: boolean;
+  location?: string;
+  location_preference?: string;
+  careLevel?: string;
+  care_level?: string;
+  timeline?: string;
+  [key: string]: unknown;
+}
+
+export interface RecommendationKeyMetrics {
+  monthly_fee?: number;
+  distance_miles?: number;
+  est_waitlist?: string;
+  care_level?: string;
+  zip_code?: string;
+}
+
+export interface RecommendationExplanations {
+  holistic_reason?: string;
+  availability_reason?: string;
+  business_reason?: string;
+  total_cost_reason?: string;
+  distance_reason?: string;
+  budget_efficiency_reason?: string;
+  amenity_reason?: string;
+  [key: string]: unknown;
+}
+
+export interface BackendRecommendation {
+  community_name?: string;
+  name?: string;
+  community_id?: string | number;
+  explanations?: RecommendationExplanations;
+  key_metrics?: RecommendationKeyMetrics;
+  careLevels?: string[];
+  amenities?: string[];
+  reason?: string;
+  price?: string;
+  address?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+export interface AnalysisResult {
+  client_info?: ClientProfileSource;
+  recommendations?: BackendRecommendation[];
+  performance_metrics?: Record<string, unknown>;
+  summary?: string;
+  [key: string]: unknown;
+}

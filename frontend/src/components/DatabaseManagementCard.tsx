@@ -29,8 +29,8 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
     const [csvUploadState, setCsvUploadState] = useState<{
         isUploading: boolean;
         isValidating: boolean;
-        validationResult: any;
-        uploadResult: any;
+        validationResult: Record<string, unknown> | null;
+        uploadResult: Record<string, unknown> | null;
         error: string;
     }>({
         isUploading: false,
@@ -100,7 +100,7 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
             }));
 
             return result;
-        } catch (error) {
+        } catch {
             setCsvUploadState(prev => ({
                 ...prev,
                 isValidating: false,
@@ -143,7 +143,7 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
                     error: result.error || 'Upload failed'
                 }));
             }
-        } catch (error) {
+        } catch {
             setCsvUploadState(prev => ({
                 ...prev,
                 isUploading: false,

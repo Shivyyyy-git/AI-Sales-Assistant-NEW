@@ -156,10 +156,10 @@ class EnhancedCommunityFilterEngine:
         if client_req.budget is None:
             print("  D. Budget not provided - skipping budget filter")
         else:
-        print(f"  D. Filtering by Budget: ${client_req.budget:,.2f}")
-        print(f"     Using: {budget_column}")
-        df = df[df[budget_column] <= client_req.budget]
-        print(f"     Remaining: {len(df)}")
+            print(f"  D. Filtering by Budget: ${client_req.budget:,.2f}")
+            print(f"     Using: {budget_column}")
+            df = df[df[budget_column] <= client_req.budget]
+            print(f"     Remaining: {len(df)}")
 
         # E. Apartment Type Preference (IMPROVEMENT: Gap #2)
         apt_pref = client_req.special_needs.get('apartment_type_preference')

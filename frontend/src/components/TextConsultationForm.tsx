@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 interface TextConsultationFormProps {
-  onResults: (results: any) => void;
+  onResults: (results: Record<string, unknown>) => void;
   apiBaseUrl: string;
 }
 
@@ -53,10 +53,10 @@ export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onRe
       onResults(result);
       setProcessingState('success');
       setStatusMessage('Transcript processed successfully. Dashboard updated!');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Processing failed:', error);
       setProcessingState('error');
-      setStatusMessage(error?.message || 'Failed to process transcript. Please try again.');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to process transcript. Please try again.');
     }
   };
 

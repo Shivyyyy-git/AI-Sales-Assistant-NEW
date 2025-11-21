@@ -8,6 +8,7 @@ import io
 import csv
 from typing import Dict, List, Any, Tuple, Optional
 import os
+import shutil
 from datetime import datetime
 
 class CSVProcessor:
@@ -115,7 +116,6 @@ class CSVProcessor:
         try:
             # Create backup
             if os.path.exists(self.excel_file_path):
-                import shutil
                 shutil.copy2(self.excel_file_path, self.backup_path)
 
             # Read existing Excel

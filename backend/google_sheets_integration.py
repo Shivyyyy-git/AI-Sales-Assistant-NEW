@@ -99,38 +99,36 @@ class GoogleSheetsCRM:
         top_metrics = top_rec.get('key_metrics', {})
         top_explanations = top_rec.get('explanations', {})
 
-        # Extract special needs
-        special_needs = client_info.get('special_needs', {})
-        special_needs_text = []
-        if special_needs.get('pets'):
-            special_needs_text.append("Pets: Yes")
-        if special_needs.get('apartment_type_preference'):
-            special_needs_text.append(f"Apt Type: {special_needs['apartment_type_preference']}")
-        if special_needs.get('other'):
-            special_needs_text.append(special_needs['other'])
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        budget_value = client_info.get('budget')
+        budget_str = f"${budget_value:,.0f}" if budget_value else ''
+        availability = top_metrics.get('est_waitlist') or top_rec.get('availability', '')
+        match_reason = top_explanations.get('holistic_reason', '')
+        total_cost = metrics.get('costs', {}).get('total_cost', 0)
 
-        # Prepare row data
+        recommendation_names = ', '.join(
+            [
+                rec.get('community_name', '').strip()
+                for rec in recommendations
+                if rec.get('community_name')
+            ]
+        ) or 'None'
+
+        # Align with requested Google Sheet column order
         row = [
-            consultation_id,
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            client_info.get('client_name', ''),
-            client_info.get('care_level', ''),
-            f"${client_info.get('budget', 0):,.0f}" if client_info.get('budget') else '',
-            client_info.get('timeline', ''),
-            client_info.get('location_preference', ''),
-            '; '.join(special_needs_text) if special_needs_text else '',
-            len(recommendations),
-            top_rec.get('community_id', ''),
-            top_rec.get('community_name', ''),
-            f"${top_metrics.get('monthly_fee', 0):,.0f}" if top_metrics.get('monthly_fee') else '',
-            round(top_metrics.get('distance_miles', 0), 2) if top_metrics.get('distance_miles') else '',
-            round(top_rec.get('combined_rank_score', 0), 2) if top_rec.get('combined_rank_score') else '',
-            top_explanations.get('holistic_reason', ''),
-            round(metrics.get('timings', {}).get('e2e_total', 0), 2),
-            f"${metrics.get('costs', {}).get('total_cost', 0):.6f}",
-            'New',  # Status
-            '',  # Assigned_To
-            ''   # Notes
+            consultation_id,                         # Client ID
+            timestamp,                               # Timestamp
+            client_info.get('client_name', ''),      # Client Name
+            budget_str,                              # Budget
+            client_info.get('location_preference', ''),  # Location
+            client_info.get('care_level', ''),       # Care Level
+            client_info.get('timeline', ''),         # Timeline
+            top_rec.get('community_name', ''),       # Top Recommendation
+            availability,                            # Availability
+            match_reason,                            # Match Reason
+            recommendation_names,                    # Total Recommendation (names)
+            round(metrics.get('timings', {}).get('e2e_total', 0), 2),  # Processing Time
+            f"{total_cost:.6f}",                     # Total Cost
         ]
 
         # Append row
@@ -151,26 +149,23 @@ class GoogleSheetsCRM:
             rankings = rec.get('rankings', {})
             explanations = rec.get('explanations', {})
 
+            monthly_fee = metrics.get('monthly_fee')
+            monthly_fee_str = f"${monthly_fee:,.0f}" if monthly_fee else ''
+            availability = metrics.get('est_waitlist') or rec.get('availability', '')
+            location = (
+                rec.get('location')
+                or rec.get('address')
+                or client_info.get('location_preference', '')
+            )
+
             row = [
-                consultation_id,
-                client_info.get('client_name', ''),
-                rec.get('final_rank', ''),
-                rec.get('community_id', ''),
-                rec.get('community_name', ''),
-                f"${metrics.get('monthly_fee', 0):,.0f}" if metrics.get('monthly_fee') else '',
-                round(metrics.get('distance_miles', 0), 2) if metrics.get('distance_miles') else '',
-                metrics.get('est_waitlist', ''),
-                round(rec.get('combined_rank_score', 0), 2) if rec.get('combined_rank_score') else '',
-                rankings.get('business_rank', ''),
-                rankings.get('total_cost_rank', ''),
-                rankings.get('distance_rank', ''),
-                rankings.get('availability_rank', ''),
-                explanations.get('holistic_reason', ''),
-                metrics.get('contract_rate', ''),
-                metrics.get('work_with_placement', ''),
-                '',  # Tour_Scheduled
-                '',  # Tour_Status
-                ''   # Client_Feedback
+                consultation_id,                     # Client ID
+                client_info.get('client_name', ''),  # Client Name
+                rec.get('community_name', ''),       # Community Name
+                monthly_fee_str,                     # Monthly Fee
+                location,                            # Location
+                availability,                        # Availability
+                explanations.get('holistic_reason', ''),  # Match Reason
             ]
 
             sheet.append_row(row, value_input_option='USER_ENTERED')
@@ -189,21 +184,13 @@ class GoogleSheetsCRM:
         costs = metrics.get('costs', {})
 
         row = [
-            datetime.now().strftime('%Y-%m-%d'),
             consultation_id,
-            round(timings.get('e2e_total', 0), 2),
-            tokens.get('extraction_input', 0),
-            tokens.get('ranking_input', 0),
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            round(timings.get('phase1_extraction', 0), 2) if timings.get('phase1_extraction') else '',
+            tokens.get('total_input_tokens', 0),
             tokens.get('total_output_tokens', 0),
-            tokens.get('total_tokens', 0),
-            metrics.get('api_calls', 0),
-            f"${costs.get('audio_input_cost', 0):.6f}" if 'audio_input_cost' in costs else f"${costs.get('text_input_cost', 0):.6f}",
-            f"${costs.get('text_input_cost', 0):.6f}",
-            f"${costs.get('output_cost', 0):.6f}",
-            f"${costs.get('total_cost', 0):.6f}",
-            round(tokens.get('total_tokens', 0) / timings.get('e2e_total', 1), 0) if timings.get('e2e_total') else 0,
-            '',  # Communities_Filtered (would need to add this to metrics)
-            ''   # Communities_Ranked (would need to add this to metrics)
+            f"{costs.get('total_cost', 0):.6f}",
+            metrics.get('api_calls', 0)
         ]
 
         sheet.append_row(row, value_input_option='USER_ENTERED')

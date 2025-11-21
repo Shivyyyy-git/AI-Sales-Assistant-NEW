@@ -39,12 +39,13 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({ isOpen, onClose, comm
               if (communityA.basePrice < communityB.basePrice) return 'A';
               if (communityB.basePrice < communityA.basePrice) return 'B';
               return 'TIE';
-          case 'availability':
+          case 'availability': {
               const rankA = availabilityRank[communityA.availability] || 0;
               const rankB = availabilityRank[communityB.availability] || 0;
               if (rankA > rankB) return 'A';
               if (rankB > rankA) return 'B';
               return 'TIE';
+          }
           case 'careLevels': // More is better
               if (communityA.careLevels.length > communityB.careLevels.length) return 'A';
               if (communityB.careLevels.length > communityA.careLevels.length) return 'B';

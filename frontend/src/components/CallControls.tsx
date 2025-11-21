@@ -66,15 +66,12 @@ const CallControls: React.FC<CallControlsProps> = ({
   status,
   isAgentAssistMode,
   isCallPaused,
-  selectedLanguage,
-  onLanguageChange,
   onStart,
   onEnd,
   onToggleAssistMode,
   onTogglePause,
   onSaveSummary,
   hasData,
-  onClearDashboard,
 }) => {
   const isCallActiveOrConnecting = status === CallStatus.ACTIVE || status === CallStatus.CONNECTING;
   const isCallActive = status === CallStatus.ACTIVE;
@@ -84,13 +81,6 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   const buttonBaseClasses = "px-4 py-2 text-sm font-semibold rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#F8F7F2] transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed";
 
-  const languages: { code: SupportedLanguage; name: string; disabled?: boolean; note?: string }[] = [
-    { code: 'en', name: 'English' },
-    { code: 'es', name: 'Español' },
-    { code: 'hi', name: 'हिन्दी (Coming Soon)', disabled: true, note: 'Coming Soon' },
-  ];
-
-  const currentLanguage = languages.find(l => l.code === selectedLanguage) || languages[0];
 
   // Close language menu when clicking outside
   useEffect(() => {

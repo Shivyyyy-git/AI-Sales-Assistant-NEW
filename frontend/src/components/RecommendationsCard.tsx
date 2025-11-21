@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Recommendation, Community } from '../types';
-import MapView from './MapView';
 
 interface RecommendationsCardProps {
   recommendations: Recommendation[];
@@ -23,38 +22,6 @@ const PartnerBadge: React.FC = () => (
     </div>
 );
 
-const PartnerReminderBanner: React.FC = () => (
-    <div className="bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 border-2 border-amber-300 rounded-lg p-3 shadow-lg animate-pulse ring-2 ring-amber-200/50 text-right">
-        <div className="flex items-start gap-2.5 justify-end">
-            <div className="flex-1 min-w-0 text-right">
-                <p className="text-xs font-bold text-amber-900 leading-tight">💰 Partner Spotlight</p>
-                <p className="text-[10px] text-amber-800 leading-tight mt-0.5">Higher commissions — mention even if #2 or #3</p>
-            </div>
-            <div className="flex-shrink-0 w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center animate-bounce">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 00-2 0v4a1 1 0 00.553.894l3 1.5a1 1 0 00.894-1.788L11 9.382V6z" clipRule="evenodd" />
-                </svg>
-            </div>
-        </div>
-    </div>
-);
-
-
-const ViewSwitcher: React.FC<{ viewMode: 'list' | 'map'; onViewChange: (mode: 'list' | 'map') => void; }> = ({ viewMode, onViewChange }) => {
-    const baseClasses = "p-1.5 rounded-md text-gray-500 hover:text-blue-500 hover:bg-gray-200/80 transition-colors duration-200";
-    const activeClasses = "!text-blue-500 bg-blue-100";
-
-    return (
-        <div className="flex items-center bg-gray-100/80 rounded-lg p-1 space-x-1">
-            <button onClick={() => onViewChange('list')} className={`${baseClasses} ${viewMode === 'list' ? activeClasses : ''}`} aria-label="List View">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-            </button>
-            <button onClick={() => onViewChange('map')} className={`${baseClasses} ${viewMode === 'map' ? activeClasses : ''}`} aria-label="Map View">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            </button>
-        </div>
-    );
-};
 
 const RecommendationsCard: React.FC<RecommendationsCardProps> = ({ 
   recommendations, 
@@ -66,7 +33,6 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
   onClear,
 }) => {
   const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [showEmailMenu, setShowEmailMenu] = useState(false);
   const emailMenuRef = useRef<HTMLDivElement>(null);
 
@@ -122,7 +88,6 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
   return (
     <div className="bg-white/90 backdrop-blur-lg border-2 border-gray-200/60 rounded-2xl p-6 lg:p-7 shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
       <div className="flex flex-col gap-3 mb-4 flex-shrink-0">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center">
             <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-3">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,15 +97,6 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
             </div>
             <h2 className="text-xl lg:text-2xl font-bold text-gray-800">Top Recommendations</h2>
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        <ViewSwitcher viewMode={viewMode} onViewChange={setViewMode} />
-        </div>
-      </div>
-        {recommendations.length > 0 && (
-          <div className="self-stretch sm:self-end max-w-sm">
-            <PartnerReminderBanner />
-          </div>
-        )}
       </div>
 
        <div className="flex flex-col gap-3 mb-4 flex-shrink-0">
@@ -241,7 +197,6 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
 
       <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
         {recommendations.length > 0 ? (
-            viewMode === 'list' ? (
                 recommendedCommunities.map((community, index) => {
                   const rec = findRecByName(community.name);
                   if (!rec) return null;
@@ -296,11 +251,6 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
                     </div>
                   )
                 })
-            ) : (
-                <div className="h-[400px] w-full bg-gray-200 rounded-lg">
-                    <MapView communities={recommendedCommunities} />
-                </div>
-            )
         ) : (
           <div className="text-center py-12 bg-gray-50/80 rounded-lg border-2 border-dashed border-gray-200">
             <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -308,19 +258,6 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
             </svg>
             <p className="mt-2 text-gray-600 font-semibold">Awaiting Recommendations</p>
             <p className="mt-1 text-gray-500 text-sm">Start a call to get AI-powered suggestions.</p>
-            <div className="mt-6 flex justify-center">
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4 max-w-md">
-                <div className="flex items-start gap-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 00-2 0v4a1 1 0 00.553.894l3 1.5a1 1 0 00.894-1.788L11 9.382V6z" clipRule="evenodd" />
-                  </svg>
-                  <div className="text-left">
-                    <p className="text-sm font-bold text-amber-900">💰 Partner Spotlight Reminder</p>
-                    <p className="text-xs text-amber-800 mt-1">Partner spotlight = higher commissions — mention them even if they're #2 or #3.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>

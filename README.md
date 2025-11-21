@@ -8,7 +8,7 @@
 ![Flask](https://img.shields.io/badge/Flask-000000?style=for-the-badge&logo=flask&logoColor=white)
 ![Google Gemini](https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)
 
-**Transform senior living consultations with AI-powered client matching and real-time CRM integration**
+**Transform senior living consultations with AI-powered client matching and real-time Google Sheets CRM integration**
 
 [🎯 Live Demo (Coming Soon)](https://www.youtube.com/watch?v=dQw4w9WgXcQ) • [📖 Documentation](#setup) • [🔧 Quick Start](#quick-start)
 
@@ -20,7 +20,7 @@
 
 **🎙️ Live AI Conversations** - Natural, real-time consultations with automatic transcription
 **📊 8-Dimensional Matching** - Advanced algorithm considering budget, location, care needs, and more
-**📈 Real-Time CRM** - Automatic Google Sheets integration for instant client tracking
+**📈 Google Sheets CRM** - Automatic CRM integration for instant client tracking and lead management
 **🎨 Modern Dashboard** - Beautiful, intuitive interface designed for senior living consultants
 
 ---
@@ -217,7 +217,7 @@ Then open `http://localhost:3000` in your browser! 🎉
 │                    📊 DATA & INTEGRATION LAYER              │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │              📋 INTELLIGENT CRM SYSTEM              │    │
+│  │          📋 GOOGLE SHEETS CRM SYSTEM            │    │
 │  │                                                     │    │
 │  │  📊 Google Sheets Integration                      │    │
 │  │     • Automated Consultation Logging               │    │
@@ -262,7 +262,7 @@ Then open `http://localhost:3000` in your browser! 🎉
 **📈 Business Intelligence**
 - **Real-Time Analytics** - Live dashboard with consultation metrics and KPIs
 - **Performance Tracking** - AI accuracy, response times, and conversion rates
-- **CRM Synchronization** - Automated lead management and follow-up workflows
+- **Google Sheets CRM** - Automated lead management and follow-up workflows
 - **Reporting Engine** - Custom reports for sales performance and client insights
 
 ---
@@ -286,8 +286,8 @@ Then open `http://localhost:3000` in your browser! 🎉
 - Prioritizes business value and availability
 - Real-time ranking updates as more information is gathered
 
-### **4. CRM Integration**
-- Automatic logging to Google Sheets
+### **4. Google Sheets CRM Integration**
+- Automatic logging to Google Sheets CRM
 - Client summaries with timestamps
 - Performance metrics tracking
 - Export-ready consultation reports

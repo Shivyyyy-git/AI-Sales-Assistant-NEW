@@ -1809,9 +1809,8 @@ ${currentUser.name}`;
   const handleToggleAssistMode = useCallback(() => {
     if (callStatus !== CallStatus.ACTIVE) return;
     const newMode = !isAgentAssistMode;
-    handleEndCall(false); 
-    handleStartCall(newMode);
-  }, [callStatus, isAgentAssistMode, handleEndCall, handleStartCall]);
+    setIsAgentAssistMode(newMode);
+  }, [callStatus, isAgentAssistMode]);
 
   const handleEscalateCall = () => {
     alert('Call escalated! A manager has been notified and will join shortly.');
@@ -2217,25 +2216,29 @@ ${currentUser.name}`;
                      </div>
                  </div>
 
-            <div className="flex items-center justify-end gap-4 flex-shrink-0">
-              <button
-                onClick={() => setShowAudioModal(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                Upload Call
-              </button>
-              <button
-                onClick={() => setShowTextModal(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6M5 7h14a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9a2 2 0 012-2z" />
-                </svg>
-                Paste Transcript
-              </button>
+            <div className="flex items-center justify-end gap-3 flex-shrink-0">
+              {callStatus === CallStatus.IDLE && (
+                <>
+                  <button
+                    onClick={() => setShowAudioModal(true)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload Call
+                  </button>
+                  <button
+                    onClick={() => setShowTextModal(true)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6M5 7h14a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9a2 2 0 012-2z" />
+                    </svg>
+                    Paste Transcript
+                  </button>
+                </>
+              )}
               <CallControls
                 status={callStatus}
                 isAgentAssistMode={isAgentAssistMode}

@@ -165,18 +165,6 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
                className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 bg-green-600 border border-transparent text-white hover:bg-green-700 focus:ring-green-500"
                title="Push to Google Sheet"
              >
-           {onClear && (
-             <button
-               onClick={onClear}
-               className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 bg-gray-100 border border-gray-200 text-gray-700 hover:bg-gray-200 focus:ring-gray-400"
-               title="Clear dashboard data"
-             >
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V5a2 2 0 012-2h10a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-               </svg>
-               Clear Recommendations
-             </button>
-           )}
                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                </svg>
@@ -233,6 +221,20 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
                  </div>
                )}
              </div>
+           )}
+
+           {/* Clear Recommendations Button */}
+           {onClear && (
+             <button
+               onClick={onClear}
+               className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 bg-red-600 border border-transparent text-white hover:bg-red-700 focus:ring-red-500"
+               title="Clear all recommendations and client data"
+             >
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+               </svg>
+               Clear Recommendations
+             </button>
            )}
          </div>
       </div>

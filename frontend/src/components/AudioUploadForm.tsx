@@ -57,10 +57,16 @@ export const AudioUploadForm: React.FC<AudioUploadFormProps> = ({ onResults, api
     try {
       const response = await fetch(`${apiBaseUrl}/api/process-audio`, {
         method: 'POST',
+        headers: {
+          'Authorization': import.meta.env.VITE_API_KEY || '',
+        },
         body: formData,
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication failed. Please check your API key configuration.');
+        }
         const details = await response.text();
         throw new Error(details || 'Processing failed');
       }

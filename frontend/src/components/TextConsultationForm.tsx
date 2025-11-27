@@ -36,6 +36,7 @@ export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onRe
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': import.meta.env.VITE_API_KEY || '',
         },
         body: JSON.stringify({
           text,
@@ -45,6 +46,9 @@ export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onRe
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication failed. Please check your API key configuration.');
+        }
         const details = await response.text();
         throw new Error(details || 'Processing failed');
       }

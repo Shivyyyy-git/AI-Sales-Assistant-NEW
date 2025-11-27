@@ -65,7 +65,11 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
 
     const downloadCsvTemplate = async () => {
         try {
-            const response = await fetch('/api/communities/csv-template');
+            const response = await fetch('/api/communities/csv-template', {
+                headers: {
+                    'Authorization': import.meta.env.VITE_API_KEY || '',
+                },
+            });
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -89,8 +93,29 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
         try {
             const response = await fetch('/api/communities/csv-validate', {
                 method: 'POST',
+                headers: {
+                    'Authorization': import.meta.env.VITE_API_KEY || '',
+                },
                 body: formData
             });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    setCsvUploadState(prev => ({
+                        ...prev,
+                        isValidating: false,
+                        error: 'Authentication failed. Please check your API key configuration.'
+                    }));
+                    return null;
+                }
+                const errorText = await response.text();
+                setCsvUploadState(prev => ({
+                    ...prev,
+                    isValidating: false,
+                    error: errorText || 'Failed to validate CSV file'
+                }));
+                return null;
+            }
 
             const result = await response.json();
             setCsvUploadState(prev => ({
@@ -119,8 +144,29 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
         try {
             const response = await fetch('/api/communities/csv-upload', {
                 method: 'POST',
+                headers: {
+                    'Authorization': import.meta.env.VITE_API_KEY || '',
+                },
                 body: formData
             });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    setCsvUploadState(prev => ({
+                        ...prev,
+                        isUploading: false,
+                        error: 'Authentication failed. Please check your API key configuration.'
+                    }));
+                    return;
+                }
+                const errorText = await response.text();
+                setCsvUploadState(prev => ({
+                    ...prev,
+                    isUploading: false,
+                    error: errorText || 'Upload failed'
+                }));
+                return;
+            }
 
             const result = await response.json();
 

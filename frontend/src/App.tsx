@@ -530,7 +530,11 @@ ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListStri
 
   const fetchCommunities = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/communities`);
+      const response = await fetch(`${API_BASE_URL}/api/communities`, {
+        headers: {
+          'Authorization': import.meta.env.VITE_API_KEY || '',
+        },
+      });
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
@@ -716,7 +720,10 @@ ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListStri
 
       const response = await fetch(`${API_BASE_URL}/api/update-crm`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': import.meta.env.VITE_API_KEY || '',
+        },
         body: JSON.stringify(payload)
       });
 
@@ -773,7 +780,10 @@ Specific Demands: ${profile.specificDemands || 'None'}
 
       const response = await fetch(`${API_BASE_URL}/api/process-text`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': import.meta.env.VITE_API_KEY || '',
+        },
         body: JSON.stringify({
           text: profileText,
           language: 'english',
@@ -1737,7 +1747,10 @@ ${currentUser.name}`;
     try {
         const response = await fetch(url, {
             method,
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': import.meta.env.VITE_API_KEY || '',
+            },
             body: JSON.stringify(backendData)
         });
         if (!response.ok) {
@@ -1755,7 +1768,12 @@ ${currentUser.name}`;
   const handleDeleteCommunity = async (communityId: number) => {
     if(window.confirm(`Are you sure you want to delete community #${communityId}? This action cannot be undone.`)) {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/communities/${communityId}`, { method: 'DELETE' });
+            const response = await fetch(`${API_BASE_URL}/api/communities/${communityId}`, {
+              method: 'DELETE',
+              headers: {
+                'Authorization': import.meta.env.VITE_API_KEY || '',
+              },
+            });
             if (!response.ok) {
                 const err = await response.json();
                 throw new Error(err.error || 'Failed to delete community');

@@ -37,50 +37,66 @@ class GoogleSheetsCRM:
         # Get configuration from parameters, environment, or use defaults
         self.spreadsheet_id = spreadsheet_id or os.getenv('GOOGLE_SPREADSHEET_ID') or DEFAULT_SPREADSHEET_ID
         
-        # Resolve service account file path relative to backend directory
-        if service_account_file:
-            self.service_account_file = service_account_file
-        elif os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE'):
-            self.service_account_file = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
-        else:
-            # Make path relative to this file's directory (backend folder)
-            backend_dir = Path(__file__).parent
-            self.service_account_file = str(backend_dir / DEFAULT_SERVICE_ACCOUNT_FILE)
-
-        # No longer raise error if spreadsheet_id is missing - use default
-
-        # Verify service account file exists
-        if not os.path.exists(self.service_account_file):
-            raise FileNotFoundError(
-                f"Service account file not found: {self.service_account_file}\n"
-                f"Please ensure the file exists in the backend directory."
-            )
-
         # Set up credentials and authenticate
         self.scopes = [
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive'
         ]
 
-        try:
-            self.creds = Credentials.from_service_account_file(
-                self.service_account_file,
-                scopes=self.scopes
-            )
-        except Exception as e:
-            error_msg = str(e)
-            if 'invalid_grant' in error_msg.lower() or 'jwt' in error_msg.lower():
-                # Extract service account email from JSON file for better error message
-                try:
-                    with open(self.service_account_file, 'r') as f:
-                        sa_data = json.load(f)
-                        sa_email = sa_data.get('client_email', 'unknown')
-                    raise ValueError(
-                        f"Invalid service account credentials. The JWT signature is invalid.\n"
-                        f"Service Account Email: {sa_email}\n"
-                        f"Possible solutions:\n"
-                        f"1. Regenerate the service account key in Google Cloud Console\n"
-                        f"2. Ensure the spreadsheet is shared with: {sa_email}\n"
+        # Try to authenticate using environment variable first (for Render deployment)
+        if os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON'):
+            try:
+                service_account_info = json.loads(os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON'))
+                self.creds = Credentials.from_service_account_info(
+                    service_account_info,
+                    scopes=self.scopes
+                )
+                self.service_account_file = None  # No file used
+                print("[CRM] Using service account from environment variable")
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Invalid JSON in GOOGLE_SERVICE_ACCOUNT_JSON environment variable: {e}\n"
+                    f"Please ensure the environment variable contains valid JSON."
+                )
+        # Fall back to file-based authentication (for local development)
+        else:
+            # Resolve service account file path relative to backend directory
+            if service_account_file:
+                self.service_account_file = service_account_file
+            elif os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE'):
+                self.service_account_file = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
+            else:
+                # Make path relative to this file's directory (backend folder)
+                backend_dir = Path(__file__).parent
+                self.service_account_file = str(backend_dir / DEFAULT_SERVICE_ACCOUNT_FILE)
+
+            # Verify service account file exists
+            if not os.path.exists(self.service_account_file):
+                raise FileNotFoundError(
+                    f"Service account file not found: {self.service_account_file}\n"
+                    f"Please ensure the file exists in the backend directory."
+                )
+
+            try:
+                self.creds = Credentials.from_service_account_file(
+                    self.service_account_file,
+                    scopes=self.scopes
+                )
+                print(f"[CRM] Using service account from file: {self.service_account_file}")
+            except Exception as e:
+                error_msg = str(e)
+                if 'invalid_grant' in error_msg.lower() or 'jwt' in error_msg.lower():
+                    # Extract service account email from JSON file for better error message
+                    try:
+                        with open(self.service_account_file, 'r') as f:
+                            sa_data = json.load(f)
+                            sa_email = sa_data.get('client_email', 'unknown')
+                        raise ValueError(
+                            f"Invalid service account credentials. The JWT signature is invalid.\n"
+                            f"Service Account Email: {sa_email}\n"
+                            f"Possible solutions:\n"
+                            f"1. Regenerate the service account key in Google Cloud Console\n"
+                            f"2. Ensure the spreadsheet is shared with: {sa_email}\n"
                         f"3. Verify the service account key file is not corrupted\n"
                         f"Original error: {error_msg}"
                     )
@@ -106,9 +122,17 @@ class GoogleSheetsCRM:
         except gspread.exceptions.SpreadsheetNotFound:
             # Extract service account email for better error message
             try:
-                with open(self.service_account_file, 'r') as f:
-                    sa_data = json.load(f)
-                    sa_email = sa_data.get('client_email', 'unknown')
+                # Try to get email from credentials object first
+                sa_email = getattr(self.creds, 'service_account_email', None)
+                
+                # If not available and using file, read from file
+                if not sa_email and self.service_account_file:
+                    with open(self.service_account_file, 'r') as f:
+                        sa_data = json.load(f)
+                        sa_email = sa_data.get('client_email', 'unknown')
+                elif not sa_email:
+                    sa_email = 'unknown'
+                
                 raise ValueError(
                     f"Spreadsheet not found or access denied.\n"
                     f"Spreadsheet ID: {self.spreadsheet_id}\n"
@@ -118,7 +142,7 @@ class GoogleSheetsCRM:
                     f"2. The spreadsheet is shared with: {sa_email} (with Editor access)\n"
                     f"3. The service account has proper permissions"
                 )
-            except (json.JSONDecodeError, KeyError):
+            except (json.JSONDecodeError, KeyError, FileNotFoundError):
                 raise ValueError(
                     f"Spreadsheet not found or access denied.\n"
                     f"Spreadsheet ID: {self.spreadsheet_id}\n"

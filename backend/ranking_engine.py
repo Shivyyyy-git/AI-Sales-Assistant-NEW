@@ -9,13 +9,13 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
-import pandas as pd
-import numpy as np
+import pandas as pd  # pyright: ignore[reportMissingImports]
+import numpy as np  # pyright: ignore[reportMissingImports]
 from datetime import datetime
 
 from google import genai
-from google.genai import types
-from geopy.distance import geodesic
+from google.genai import types  # pyright: ignore[reportMissingImports]
+from geopy.distance import geodesic  # pyright: ignore[reportMissingImports]
 
 
 @dataclass
@@ -936,7 +936,8 @@ class MultiLevelRankingEngine:
                     print(f"  [OK] {dimension} ranking complete (AI)")
                 except Exception as e:
                     print(f"  [ERROR] {dimension} ranking failed: {e}")
-                    all_rankings[dimension] = self._fallback_ranking(communities if dimension != 'holistic' else top_candidates, dimension)
+                    # Use top_candidates for all AI ranker fallbacks since they all operate on the same subset
+                    all_rankings[dimension] = self._fallback_ranking(top_candidates, dimension)
 
         # Step 3: Aggregate ranks using weighted Borda count ONLY for top candidates
         print("[PHASE 3] Aggregating ranks using weighted Borda count...")

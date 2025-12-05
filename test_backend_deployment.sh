@@ -4,7 +4,7 @@
 echo "🔍 Testing AI Sales Assistant Backend Deployment"
 echo "================================================"
 
-BACKEND_URL="https://ai-sales-assistant-backend.onrender.com"
+BACKEND_URL="https://ai-sales-assistant-backend-te68.onrender.com"
 
 echo ""
 echo "1. Testing root endpoint..."

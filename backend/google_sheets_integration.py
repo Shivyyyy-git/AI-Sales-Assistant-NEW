@@ -97,17 +97,17 @@ class GoogleSheetsCRM:
                             f"Possible solutions:\n"
                             f"1. Regenerate the service account key in Google Cloud Console\n"
                             f"2. Ensure the spreadsheet is shared with: {sa_email}\n"
-                        f"3. Verify the service account key file is not corrupted\n"
-                        f"Original error: {error_msg}"
-                    )
-                except (json.JSONDecodeError, KeyError):
-                    raise ValueError(
-                        f"Invalid service account credentials. The JWT signature is invalid.\n"
-                        f"Please regenerate the service account key in Google Cloud Console.\n"
-                        f"Original error: {error_msg}"
-                    )
-            else:
-                raise
+                            f"3. Verify the service account key file is not corrupted\n"
+                            f"Original error: {error_msg}"
+                        )
+                    except (json.JSONDecodeError, KeyError):
+                        raise ValueError(
+                            f"Invalid service account credentials. The JWT signature is invalid.\n"
+                            f"Please regenerate the service account key in Google Cloud Console.\n"
+                            f"Original error: {error_msg}"
+                        )
+                else:
+                    raise
 
         try:
             self.client = gspread.authorize(self.creds)

@@ -16,7 +16,7 @@ services:
       - key: DATA_FILE
         value: DataFile_students_OPTIMIZED.xlsx
       - key: FRONTEND_ORIGIN
-        sync: false
+        value: https://ai-sales-assistant-frontend.onrender.com
       - key: PYTHON_VERSION
         value: 3.11.0
     healthCheckPath: /api/health

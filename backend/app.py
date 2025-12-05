@@ -26,10 +26,12 @@ CORS(app, resources={
         "origins": [
             "http://localhost:3000",  # Development
             "http://localhost:5173",  # Vite dev server
-            os.getenv("FRONTEND_ORIGIN", "*")  # Production (will be set by Render)
+            "https://ai-sales-assistant-frontend.onrender.com",  # Production frontend
+            os.getenv("FRONTEND_ORIGIN", "https://ai-sales-assistant-frontend.onrender.com")
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
     }
 })
 

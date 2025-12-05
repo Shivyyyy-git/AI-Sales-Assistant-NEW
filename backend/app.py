@@ -461,5 +461,15 @@ def send_email_manager():
     return jsonify({'success': True, 'message': 'Email feature is currently disabled.'})
 
 
+# Print startup info for debugging
+print("=" * 60)
+print("🚀 AI Sales Assistant Backend Starting...")
+print(f"   Flask version: {Flask.__version__}")
+print(f"   Data file: {DATA_FILE}")
+print(f"   Data file exists: {Path(DATA_FILE).exists()}")
+print(f"   CORS origins: {allowed_origins}")
+print(f"   Total routes: {len(list(app.url_map.iter_rules()))}")
+print("=" * 60)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050)

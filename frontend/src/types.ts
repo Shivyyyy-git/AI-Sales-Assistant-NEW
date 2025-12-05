@@ -61,7 +61,7 @@ export interface User {
   avatar: string; // A string for initials, e.g., "AC"
 }
 
-export type SupportedLanguage = 'en' | 'hi' | 'es';
+export type SupportedLanguage = 'en'; // English only - no other languages allowed
 
 export interface LanguageConfig {
   code: SupportedLanguage;

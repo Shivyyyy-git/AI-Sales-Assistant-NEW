@@ -1,15 +1,14 @@
 
 
 
-import React, { useRef, useState, useEffect } from 'react';
-import { CallStatus, SupportedLanguage } from '../types';
+import React from 'react';
+import { CallStatus } from '../types';
 
 interface CallControlsProps {
   status: CallStatus;
   isAgentAssistMode: boolean;
   isCallPaused: boolean;
-  selectedLanguage: SupportedLanguage;
-  onLanguageChange: (lang: SupportedLanguage) => void;
+  // Language locked to English only - no selection needed
   onStart: () => void;
   onEnd: () => void;
   onToggleAssistMode: () => void;
@@ -76,28 +75,8 @@ const CallControls: React.FC<CallControlsProps> = ({
   const isCallActiveOrConnecting = status === CallStatus.ACTIVE || status === CallStatus.CONNECTING;
   const isCallActive = status === CallStatus.ACTIVE;
   const isProcessing = status === CallStatus.PROCESSING;
-  const languageMenuRef = useRef<HTMLDivElement>(null);
-  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
 
   const buttonBaseClasses = "px-4 py-2 text-sm font-semibold rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#F8F7F2] transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed";
-
-
-  // Close language menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (languageMenuRef.current && !languageMenuRef.current.contains(event.target as Node)) {
-        setShowLanguageMenu(false);
-      }
-    };
-
-    if (showLanguageMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showLanguageMenu]);
 
   return (
     <div className="flex items-center space-x-2">

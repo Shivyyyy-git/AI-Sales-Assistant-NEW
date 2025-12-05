@@ -102,18 +102,7 @@ export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onRe
       </div>
 
       <div className="space-y-3 flex-1 flex flex-col">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Transcript Language</label>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-lg shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-          >
-        <option value="english">English</option>
-        <option value="hindi">Hindi</option>
-        <option value="spanish">Spanish</option>
-      </select>
-        </div>
+        {/* Language locked to English only - no selection needed */}
 
         <div className="flex-1 flex flex-col">
           <label className="block text-sm font-medium text-gray-700 mb-2">Consultation Transcript</label>

@@ -111,21 +111,7 @@ export const AudioUploadForm: React.FC<AudioUploadFormProps> = ({ onResults, api
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Language spoken in the call</label>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-lg shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-            disabled={processingState === 'processing'}
-          >
-        <option value="english">English</option>
-        <option value="hindi">Hindi</option>
-        <option value="spanish">Spanish</option>
-      </select>
-        </div>
-      </div>
+      {/* Language locked to English only - no selection needed */}
 
       {/* Google Sheets Auto-Push Toggle */}
       <div className="bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl p-4 border border-gray-200">

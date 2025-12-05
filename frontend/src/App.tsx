@@ -53,7 +53,7 @@ const updateDashboardFunctionDeclaration: FunctionDeclaration = {
       },
       communityRecommendations: {
         type: Type.ARRAY,
-        description: 'A list of top 3 recommended communities based on the current profile. For each, include key details extracted from the knowledge base.',
+        description: 'A list of the top 3-5 recommended communities based on the current profile. ALWAYS provide at least 3 communities when making recommendations. For each, include key details extracted from the knowledge base.',
         items: {
           type: Type.OBJECT,
           properties: {
@@ -91,10 +91,10 @@ const INITIAL_NOISE_PROFILE: NoiseProfile = { floor: 0.0012, ceiling: 0.02, last
 const INITIAL_SILENCE_TRACKER: SilenceTracker = { lastAudioTime: 0, silenceStart: 0, turnEnded: false, turnEndedAt: 0 };
 
 const AUDIO_BUFFER_SIZE = 1024;
-const MIN_SPEECH_THRESHOLD = 0.0007; // Lowered for better speech detection sensitivity
+const MIN_SPEECH_THRESHOLD = 0.0012; // Reduced sensitivity to avoid picking up background noise
 const MAX_SILENCE_BEFORE_DROP = 2200;
-const END_TURN_SILENCE_MS = 150; // 150ms of silence - ultra-responsive conversational flow
-const END_TURN_CONFIRMATION_MS = 150; // Send endOfTurn multiple times for reliability (increased window)
+const END_TURN_SILENCE_MS = 900; // 900ms (0.9 seconds) allows natural pauses in speech
+const END_TURN_CONFIRMATION_MS = 200; // Send endOfTurn confirmation window
 type EnhancedMediaTrackConstraints = MediaTrackConstraints & { voiceIsolation?: boolean };
 type MediaTrackSupportedConstraintsWithVoiceIsolation = MediaTrackSupportedConstraints & { voiceIsolation?: boolean };
 
@@ -209,6 +209,9 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
   
+  // Video walkthrough modal
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  
   // Google Sheets auto-push toggle (ON by default)
   const [autoPushToSheet, setAutoPushToSheet] = useState(true);
 
@@ -217,7 +220,7 @@ export default function App() {
   const isAiMutedRef = useRef(false);
   const isAgentAssistMode = isAiMuted;
   const [isCallPaused, setIsCallPaused] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en');
+  const selectedLanguage: SupportedLanguage = 'en'; // English only - locked, no other languages allowed
   const [clientProfile, setClientProfile] = useState<ClientProfile>({});
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
@@ -322,14 +325,20 @@ export default function App() {
   const updateTranscriptionEntry = useCallback((speaker: 'user' | 'model', rawText?: string) => {
     // Show what the server sent, keep it raw, and preserve the conversation flow.
     if (typeof rawText !== 'string' || rawText.length === 0) return;
+    
+    // Clean stray backslashes and escape sequences that shouldn't appear in display text
+    const cleanedText = rawText
+      .replace(/\\(?![nrt"'\\])/g, '') // Remove backslashes not followed by n, r, t, ", ', or \
+      .replace(/\\\s+/g, ' '); // Replace backslash + whitespace with just whitespace
+    
     setTranscription(prev => {
       const last = prev[prev.length - 1];
       if (last?.speaker === speaker) {
         // Continue the same speaker's line by concatenating raw chunks
-        return [...prev.slice(0, -1), { speaker, text: last.text + rawText }];
+        return [...prev.slice(0, -1), { speaker, text: last.text + cleanedText }];
       }
       // New speaker or first entry: add a new line
-      return [...prev, { speaker, text: rawText }];
+      return [...prev, { speaker, text: cleanedText }];
     });
   }, []);
 
@@ -466,7 +475,7 @@ const handleAnalysisResults = useCallback((result: AnalysisResult | null, source
       autoPushToSheet && 
       recommendations.length >= 3 && 
       prevRecommendationsLengthRef.current === 0 &&
-      (callStatus === CallStatus.IDLE || callStatus === CallStatus.STOPPED) &&
+      callStatus === CallStatus.IDLE &&
       clientProfile.name // Ensure we have client data
     ) {
       // Auto-push after a short delay to ensure all data is ready
@@ -524,61 +533,67 @@ ${selectedLanguage === 'en' ? `
 - All responses must be in ${languageNames[selectedLanguage]}
 `}
 
-**CONVERSATION FLOW - NATURAL AND RESPECTFUL:**
-1. **Start with warmth:** Begin with a friendly greeting. "Hi! How are you today?"
-2. **Get their name first:** "I'd love to start by getting your name."
-3. **Build rapport:** Take a moment to make them comfortable. "It's great to talk with you, [Name]."
-4. **Understand their needs:** Ask open-ended questions naturally:
-   - "So what brings you to us today? Are you looking for yourself or helping a loved one?"
-   - "What type of care are you looking for - Independent Living, Assisted Living, or Memory Care?"
-5. **Gather key information conversationally:**
-   - Location: "What area are you looking in?"
-   - Budget: "What's your monthly budget range? This helps me find the best matches."
-   - Timeline: "How soon are you looking to move in?"
-   - Special needs: "Are there any specific needs or preferences I should know about?"
-6. **Don't rush:** Let them speak fully. Acknowledge what they say before moving on.
-7. **Natural transitions:** Use phrases like:
-   - "That's really helpful to know..."
-   - "I understand..."
-   - "That makes sense..."
-   - "Let me note that down..."
+**CONVERSATION APPROACH:**
+- Respond naturally to what the client actually says - don't follow a script or template
+- Listen carefully to what they share upfront, then build your response around that
+- If they provide information immediately (location, care type, budget, urgency), acknowledge ALL of it before asking follow-up questions
+- Only ask for information you don't already have - never repeat questions about details they've already shared
+- Be conversational, adaptive, and genuinely helpful - not formulaic or robotic
+- Match their energy and communication style
+
+**INFORMATION TO GATHER (Adapt based on what's already shared):**
+When not already provided, naturally gather:
+- Their name (for personalization)
+- Who needs care (themselves or a loved one)
+- Type of care needed (Independent Living, Assisted Living, Memory Care)
+- Location preference (city, region, or ZIP code)
+- Budget range (if comfortable sharing)
+- Timeline for moving
+- Special needs or preferences (medical, social, amenities)
+
+**RESPONSE PATTERNS - Be Adaptive:**
+- If they share multiple details upfront → Acknowledge everything they said, then ask about missing key details
+  Example: "Great! So you're looking for assisted living in Rochester. Let me help you find the perfect place. Is this for yourself or a loved one?"
+- If they're vague or just greeting → Welcome them warmly and ask an open question
+  Example: "Hi! I'm here to help you find the perfect senior living community. What brings you here today?"
+- If they seem unsure → Be patient and guide them gently through what you need to know
+- If they're in a hurry → Be efficient while staying warm and helpful
 
 **DASHBOARD UPDATES (Behind the Scenes) - REAL-TIME & INSTANT:**
 - Call \`updateDashboard\` IMMEDIATELY when you learn ANY new piece of information, no matter how small
 - Update fields INCREMENTALLY as you gather them - don't batch or wait to collect multiple fields
 - You MUST call \`updateDashboard\` MULTIPLE times during a conversation as you learn new details
-- Example flow: Client says name → update dashboard NOW. Client says budget → update dashboard NOW again.
+- Example flow: Client says location → update dashboard NOW. Client says budget → update dashboard NOW again.
 - Update \`clientProfile\` with new details field-by-field: name, location, budget, care level, timeline, special needs
 - Provide \`suggestedQuestions\` (2-3 questions) for missing information
-- Generate \`communityRecommendations\` when you have enough info (at least location + care level OR budget)
+- Generate \`communityRecommendations\` ONLY when you have ALL 4 KEY PIECES of information:
+  1. Budget (monthly budget range)
+  2. Location (city, area, or ZIP code)
+  3. Care Type (Independent Living, Assisted Living, or Memory Care)
+  4. Timeline (move-in timeline)
+  - CRITICAL: ALWAYS provide 3-5 communities when generating recommendations, not just 1
+  - CRITICAL: Use exact community names from the knowledge base (e.g., "Community 12345")
 - Provide \`agentGuidance\` with helpful coaching tips for the human agent
 - NEVER mention the dashboard or technical terms to the client
 - Remember: INSTANT updates = better user experience. Update as soon as you learn each detail!
 
 **RECOMMENDATIONS:**
-- Wait until you have meaningful information before recommending communities
-- When recommending, be enthusiastic but not pushy: "Based on what you've shared, I have some wonderful options that could be perfect..."
-- Explain WHY each recommendation fits their needs
+- Generate recommendations ONLY once you have ALL 4 required pieces: budget, location, care type, and timeline
+- ALWAYS provide 3-5 communities (not just 1!) that best match the client's needs
+- Be enthusiastic but not pushy when presenting options
+- Explain WHY each recommendation fits their specific needs
 - Prioritize: location match, budget fit, care level, availability, partner status
 
 **WHAT TO AVOID:**
+- DON'T follow scripted conversation templates - respond to what they actually say
 - DON'T ask multiple questions in one breath - space them out naturally
 - DON'T sound like an interrogation - this is a conversation, not a form
 - DON'T repeat questions they already answered
+- DON'T ignore information they provide upfront
 - DON'T output technical data, JSON, or debugging information
 - DON'T use broken text formatting - always use proper spacing
 - DON'T be overly formal or robotic - be friendly and approachable
 - DON'T rush through the conversation - take time to connect
-
-**EXAMPLE OF GOOD CONVERSATION:**
-Client: "Hi, how are you?"
-You: "I'm doing great, thanks for asking! How are you doing today? I'd love to start by getting your name."
-
-Client: "My name is Sarah."
-You: "It's wonderful to meet you, Sarah! So, what brings you to us today? Are you looking for a community for yourself or helping a loved one find the right place?"
-
-Client: "I'm looking for my mom. She needs assisted living."
-You: "I understand. Finding the right assisted living community for your mom is such an important decision. What area are you looking in? That'll help me find the best options for her."
 
 **Available Communities Knowledge Base:**
 ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListString]);
@@ -1125,7 +1140,7 @@ ${currentUser.name}`;
                 MIN_SPEECH_THRESHOLD / 4,
                 (noiseProfile.floor * 0.98) + (rmsLevel * 0.02)
               );
-              const threshold = Math.max(noiseProfile.floor * 3.0, MIN_SPEECH_THRESHOLD);
+              const threshold = Math.max(noiseProfile.floor * 4.5, MIN_SPEECH_THRESHOLD);
               const isSpeech = rmsLevel > threshold;
               const tracker = silenceTrackerRef.current;
               const now = Date.now();
@@ -1871,17 +1886,15 @@ ${currentUser.name}`;
               <div className="max-w-5xl mx-auto">
                 <div className="flex justify-center gap-4 my-8">
                   {/* Watch Product Walkthrough */}
-                  <a
-                    href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => setShowVideoModal(true)}
                     className="group relative flex items-center justify-center gap-2 rounded-xl border-2 border-red-100 bg-white px-6 py-3 text-sm font-semibold text-red-600 hover:border-red-200 hover:bg-red-50 transition-all duration-200 shadow-md hover:shadow-lg w-64"
                   >
                     <svg className="w-5 h-5 text-red-500 group-hover:scale-110 transition-transform flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                     </svg>
                     <span>Watch Walkthrough</span>
-                  </a>
+                  </button>
 
                   {/* View Source Code */}
                   <a
@@ -2698,6 +2711,79 @@ ${currentUser.name}`;
             </div>
           )}
         </div>
+
+        {/* Video Walkthrough Modal */}
+        {showVideoModal && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowVideoModal(false)}
+          >
+            <div 
+              className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-white">Product Walkthrough</h3>
+                </div>
+                <button
+                  onClick={() => setShowVideoModal(false)}
+                  className="text-white/90 hover:text-white hover:bg-white/20 rounded-lg p-2 transition-all"
+                  aria-label="Close video"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Video Container */}
+              <div className="relative bg-black" style={{ paddingBottom: '56.25%' }}>
+                <iframe
+                  className="absolute top-0 left-0 w-full h-full"
+                  src="https://www.youtube.com/embed/eCkP7_ZI348?si=8yUjD6J1YUO2jrIT"
+                  title="YouTube video player"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allowFullScreen
+                />
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
+                <p className="text-sm text-gray-600">
+                  See the AI Placement Assistant in action
+                </p>
+                <div className="flex gap-2">
+                  <a
+                    href="https://www.youtube.com/watch?v=eCkP7_ZI348"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-all shadow-sm hover:shadow-md"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                    </svg>
+                    Watch on YouTube
+                  </a>
+                  <button
+                    onClick={() => setShowVideoModal(false)}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-all"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2791,8 +2877,6 @@ ${currentUser.name}`;
                 status={callStatus}
                 isAgentAssistMode={isAgentAssistMode}
                 isCallPaused={isCallPaused}
-                selectedLanguage={selectedLanguage}
-                onLanguageChange={setSelectedLanguage}
                 onStart={handleStartCall}
                 onEnd={() => handleEndCall()}
                 onToggleAssistMode={handleToggleMute}
@@ -3018,6 +3102,80 @@ ${currentUser.name}`;
         onSubmit={handleSaveCommunity}
         communityToEdit={communityToEdit}
       />
+
+      {/* Video Walkthrough Modal */}
+      {showVideoModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowVideoModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white">Product Walkthrough</h3>
+              </div>
+              <button
+                onClick={() => setShowVideoModal(false)}
+                className="text-white/90 hover:text-white hover:bg-white/20 rounded-lg p-2 transition-all"
+                aria-label="Close video"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Video Container */}
+            <div className="relative bg-black" style={{ paddingBottom: '56.25%' }}>
+              <iframe
+                className="absolute top-0 left-0 w-full h-full"
+                src="https://www.youtube.com/embed/eCkP7_ZI348?si=8yUjD6J1YUO2jrIT"
+                title="YouTube video player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
+              <p className="text-sm text-gray-600">
+                See the AI Placement Assistant in action
+              </p>
+              <div className="flex gap-2">
+                <a
+                  href="https://www.youtube.com/watch?v=eCkP7_ZI348"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-all shadow-sm hover:shadow-md"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                  </svg>
+                  Watch on YouTube
+                </a>
+                <button
+                  onClick={() => setShowVideoModal(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Client Email Modal */}
       {showClientEmailModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

@@ -64,7 +64,34 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
   }, [allCommunities]);
   
   const recommendedCommunities = useMemo(() => {
-    return recommendations.map(r => communitiesMap.get(r.name)).filter(Boolean) as Community[];
+    return recommendations.map(r => {
+      // Try exact name match first
+      let community = communitiesMap.get(r.name);
+      
+      // If no match, try to find by ID (extract number from name)
+      if (!community) {
+        const idMatch = r.name.match(/\d+/);
+        if (idMatch) {
+          const id = idMatch[0];
+          // Look for "Community {id}" format
+          community = communitiesMap.get(`Community ${id}`);
+        }
+      }
+      
+      // If still no match, try partial name matching
+      if (!community) {
+        // Try finding a community whose name includes the recommendation name or vice versa
+        for (const [name, comm] of communitiesMap.entries()) {
+          if (name.toLowerCase().includes(r.name.toLowerCase()) || 
+              r.name.toLowerCase().includes(name.toLowerCase())) {
+            community = comm;
+            break;
+          }
+        }
+      }
+      
+      return community;
+    }).filter(Boolean) as Community[];
   }, [recommendations, communitiesMap]);
 
 

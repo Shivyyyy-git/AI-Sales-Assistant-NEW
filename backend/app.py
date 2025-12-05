@@ -21,19 +21,23 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # CORS configuration for production
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "http://localhost:3000",  # Development
-            "http://localhost:5173",  # Vite dev server
-            "https://ai-sales-assistant-frontend.onrender.com",  # Production frontend
-            os.getenv("FRONTEND_ORIGIN", "https://ai-sales-assistant-frontend.onrender.com")
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True
-    }
-})
+allowed_origins = [
+    "http://localhost:3000",  # Development
+    "http://localhost:5173",  # Vite dev server
+    "https://ai-sales-assistant-frontend.onrender.com",  # Production frontend
+]
+
+# Add FRONTEND_ORIGIN env var if set and not already in list
+frontend_origin = os.getenv("FRONTEND_ORIGIN")
+if frontend_origin and frontend_origin not in allowed_origins:
+    allowed_origins.append(frontend_origin)
+
+CORS(app, 
+     origins=allowed_origins,
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"],
+     supports_credentials=True,
+     expose_headers=["Content-Type"])
 
 # Global error handler to ensure all errors return JSON
 @app.errorhandler(Exception)
@@ -66,6 +70,21 @@ def get_system() -> RankingBasedRecommendationSystem:
     if recommendation_system is None:
         recommendation_system = RankingBasedRecommendationSystem(DATA_FILE)
     return recommendation_system
+
+
+@app.route('/', methods=['GET'])
+def root():
+    return jsonify({
+        "message": "AI Sales Assistant API is running",
+        "status": "healthy",
+        "version": "1.0",
+        "endpoints": {
+            "health": "/api/health",
+            "communities": "/api/communities",
+            "process_text": "/api/process-text",
+            "process_audio": "/api/process-audio"
+        }
+    })
 
 
 @app.route('/api/health', methods=['GET'])

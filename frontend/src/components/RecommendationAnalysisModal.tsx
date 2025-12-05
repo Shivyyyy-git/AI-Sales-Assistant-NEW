@@ -57,6 +57,18 @@ export const RecommendationAnalysisModal: React.FC<RecommendationAnalysisModalPr
   const recommendations = results?.recommendations || [];
   const clientInfo = results?.client_info || {};
   const hasData = recommendations.length > 0;
+  
+  // Detect if this is from live call (simplified) or backend (full analysis)
+  const isLiveCallData = useMemo(() => {
+    if (!hasData) return false;
+    const firstRec = recommendations[0] as Record<string, unknown>;
+    // Live calls have combined_rank_score = 0 and no detailed rankings
+    return (
+      firstRec.combined_rank_score === 0 || 
+      !firstRec.rankings || 
+      Object.keys(firstRec.rankings || {}).length === 0
+    );
+  }, [hasData, recommendations]);
 
   const dimensionData = useMemo(() => {
     if (!hasData) return [];
@@ -97,8 +109,12 @@ export const RecommendationAnalysisModal: React.FC<RecommendationAnalysisModalPr
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-6 flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold">Recommendation Analysis</h2>
-            <p className="text-blue-100 text-sm mt-1">Detailed rationale for client and manager review</p>
+            <h2 className="text-3xl font-bold">{isLiveCallData ? 'Live Call Summary' : 'Recommendation Analysis'}</h2>
+            <p className="text-blue-100 text-sm mt-1">
+              {isLiveCallData 
+                ? 'Real-time recommendations generated during consultation' 
+                : 'Detailed rationale for client and manager review'}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -141,7 +157,55 @@ export const RecommendationAnalysisModal: React.FC<RecommendationAnalysisModalPr
             <div className="text-center py-12">
               <p className="text-gray-500">No recommendation data available.</p>
             </div>
+          ) : isLiveCallData ? (
+            // Simplified view for Live Call recommendations
+            <div className="space-y-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
+                <div className="flex items-start gap-3">
+                  <svg className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <h4 className="font-bold text-blue-900 mb-1">Live Call Recommendations</h4>
+                    <p className="text-sm text-blue-800">
+                      These recommendations were generated in real-time by Gemini AI during the consultation. 
+                      For detailed 8-dimensional analysis, use Audio Upload or Text Transcript features.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {dimensionData.map((rec, recIndex) => (
+                <div key={recIndex} className="bg-white border-2 border-gray-200 rounded-2xl p-6 shadow-lg">
+                  {/* Community Header */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-lg">
+                      #{rec.finalRank}
+                    </span>
+                    <div>
+                      <h3 className="text-2xl font-bold text-gray-900">{rec.communityName}</h3>
+                      <p className="text-sm text-gray-500 mt-1">Community ID: {rec.communityId}</p>
+                    </div>
+                  </div>
+
+                  {/* AI Recommendation Reason */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl flex-shrink-0">⭐</span>
+                      <div>
+                        <h5 className="font-bold text-gray-900 mb-2">Why This Community</h5>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          {rec.dimensions.find(d => d.key === 'holistic_reason')?.explanation || 
+                           'Recommended based on client requirements and real-time conversation context.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
+            // Full detailed view for Backend-processed recommendations
             <div className="space-y-8">
               {dimensionData.map((rec, recIndex) => (
                 <div key={recIndex} className="bg-white border-2 border-gray-200 rounded-2xl p-6 shadow-lg">
@@ -225,7 +289,9 @@ export const RecommendationAnalysisModal: React.FC<RecommendationAnalysisModalPr
         {/* Footer */}
         <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-8 py-4 flex justify-between items-center">
           <p className="text-sm text-gray-600">
-            This analysis provides detailed justification for client conversations and manager reviews.
+            {isLiveCallData 
+              ? 'Live call recommendations based on real-time AI conversation. For detailed analysis, use Audio Upload or Text Transcript features.' 
+              : 'This analysis provides detailed justification for client conversations and manager reviews.'}
           </p>
           <button
             onClick={onClose}

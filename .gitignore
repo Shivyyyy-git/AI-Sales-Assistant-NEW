@@ -43,6 +43,12 @@ backend/uploads/
 .env.local
 .env.production
 
+# Google Service Account (sensitive!)
+*service-account*.json
+capstone-project-*.json
+backend/*.json
+!backend/package*.json
+
 # IDE
 .vscode/
 .idea/

@@ -124,10 +124,31 @@ export interface BackendRecommendation {
   [key: string]: unknown;
 }
 
+export interface PerformanceMetrics {
+  api_calls?: number;
+  timings?: {
+    e2e_total?: number;
+    phase1_extraction?: number;
+    phase2_filtering?: number;
+    phase3_ranking?: number;
+    geocoding?: number;
+  };
+  token_counts?: {
+    total_tokens?: number;
+    total_input_tokens?: number;
+    total_output_tokens?: number;
+  };
+  costs?: {
+    total_cost?: number;
+    extraction_cost?: number;
+    ranking_cost?: number;
+  };
+}
+
 export interface AnalysisResult {
   client_info?: ClientProfileSource;
   recommendations?: BackendRecommendation[];
-  performance_metrics?: Record<string, unknown>;
+  performance_metrics?: PerformanceMetrics;
   summary?: string;
   [key: string]: unknown;
 }

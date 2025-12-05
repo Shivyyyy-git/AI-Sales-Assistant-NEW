@@ -20,6 +20,8 @@ services:
     envVars:
       - key: VITE_GEMINI_API_KEY
         sync: false
+      - key: VITE_API_BASE_URL
+        value: https://ai-sales-assistant-backend.onrender.com
     routes:
       - type: rewrite
         source: /api/*

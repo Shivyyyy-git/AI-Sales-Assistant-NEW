@@ -8,6 +8,7 @@ interface DatabaseManagementCardProps {
     onEdit: (community: Community) => void;
     onDelete: (communityId: number) => void;
     onCommunitiesUpdate?: () => void;
+    apiBaseUrl: string;
 }
 
 const StatCard: React.FC<{label: string, value: string | number, icon: React.ReactNode}> = ({label, value, icon}) => (
@@ -23,7 +24,7 @@ const StatCard: React.FC<{label: string, value: string | number, icon: React.Rea
 );
 
 
-const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communities, onAdd, onEdit, onDelete, onCommunitiesUpdate }) => {
+const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communities, onAdd, onEdit, onDelete, onCommunitiesUpdate, apiBaseUrl }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showCsvGuide, setShowCsvGuide] = useState(false);
     const [csvUploadState, setCsvUploadState] = useState<{
@@ -65,11 +66,7 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
 
     const downloadCsvTemplate = async () => {
         try {
-            const response = await fetch('/api/communities/csv-template', {
-                headers: {
-                    'Authorization': import.meta.env.VITE_API_KEY || '',
-                },
-            });
+            const response = await fetch(`${apiBaseUrl}/api/communities/csv-template`);
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -91,31 +88,10 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
         formData.append('file', file);
 
         try {
-            const response = await fetch('/api/communities/csv-validate', {
+            const response = await fetch(`${apiBaseUrl}/api/communities/csv-validate`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': import.meta.env.VITE_API_KEY || '',
-                },
                 body: formData
             });
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    setCsvUploadState(prev => ({
-                        ...prev,
-                        isValidating: false,
-                        error: 'Authentication failed. Please check your API key configuration.'
-                    }));
-                    return null;
-                }
-                const errorText = await response.text();
-                setCsvUploadState(prev => ({
-                    ...prev,
-                    isValidating: false,
-                    error: errorText || 'Failed to validate CSV file'
-                }));
-                return null;
-            }
 
             const result = await response.json();
             setCsvUploadState(prev => ({
@@ -125,11 +101,11 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
             }));
 
             return result;
-        } catch {
+        } catch (error) {
             setCsvUploadState(prev => ({
                 ...prev,
                 isValidating: false,
-                error: 'Failed to validate CSV file'
+                error: error instanceof Error ? error.message : 'Failed to validate CSV file'
             }));
             return null;
         }
@@ -142,31 +118,10 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
         formData.append('file', file);
 
         try {
-            const response = await fetch('/api/communities/csv-upload', {
+            const response = await fetch(`${apiBaseUrl}/api/communities/csv-upload`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': import.meta.env.VITE_API_KEY || '',
-                },
                 body: formData
             });
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    setCsvUploadState(prev => ({
-                        ...prev,
-                        isUploading: false,
-                        error: 'Authentication failed. Please check your API key configuration.'
-                    }));
-                    return;
-                }
-                const errorText = await response.text();
-                setCsvUploadState(prev => ({
-                    ...prev,
-                    isUploading: false,
-                    error: errorText || 'Upload failed'
-                }));
-                return;
-            }
 
             const result = await response.json();
 
@@ -189,11 +144,11 @@ const DatabaseManagementCard: React.FC<DatabaseManagementCardProps> = ({ communi
                     error: result.error || 'Upload failed'
                 }));
             }
-        } catch {
+        } catch (error) {
             setCsvUploadState(prev => ({
                 ...prev,
                 isUploading: false,
-                error: 'Failed to upload CSV file'
+                error: error instanceof Error ? error.message : 'Failed to upload CSV file'
             }));
         }
     };

@@ -11,6 +11,8 @@ interface RecommendationsCardProps {
   onSendEmailToClient?: () => void;
   onSendEmailToManager?: () => void;
   onClear?: () => void;
+  autoPushToSheet?: boolean;
+  setAutoPushToSheet?: (value: boolean) => void;
 }
 
 const PartnerBadge: React.FC = () => (
@@ -31,12 +33,14 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
   onSendEmailToClient,
   onSendEmailToManager,
   onClear,
+  autoPushToSheet = true,
+  setAutoPushToSheet,
 }) => {
   const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
   const [showEmailMenu, setShowEmailMenu] = useState(false);
   const emailMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close Excel/CRM menu when clicking outside
+  // Close email menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (emailMenuRef.current && !emailMenuRef.current.contains(event.target as Node)) {
@@ -86,78 +90,93 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
   const findRecByName = (name: string) => recommendations.find(rec => rec.name === name);
 
   return (
-    <div className="bg-white/90 backdrop-blur-lg border-2 border-gray-200/60 rounded-2xl p-6 lg:p-7 shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
-      <div className="flex flex-col gap-3 mb-4 flex-shrink-0">
+    <div className="bg-white/90 backdrop-blur-lg border-2 border-gray-200/60 rounded-2xl p-4 shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
+      <div className="flex flex-col gap-2 mb-3 flex-shrink-0">
         <div className="flex items-center">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-3">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
             </div>
-            <h2 className="text-xl lg:text-2xl font-bold text-gray-800">Top Recommendations</h2>
+            <h2 className="text-lg lg:text-xl font-bold text-gray-800">Top Recommendations</h2>
         </div>
       </div>
 
-       <div className="flex flex-col gap-3 mb-4 flex-shrink-0">
-         {/* Action Buttons Row - All using Compare Selected style */}
+       <div className="flex flex-col gap-2 mb-3 flex-shrink-0">
+         {/* Action Buttons Row - No Scroll */}
          <div className="flex flex-wrap justify-center gap-2.5">
            {/* Compare Selected Button - First */}
          <button
             onClick={handleCompareClick}
             disabled={selectedForComparison.length !== 2}
-             className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 border border-transparent text-white hover:bg-blue-700 focus:ring-blue-500"
+             className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 border border-transparent text-white hover:bg-blue-700 focus:ring-blue-500 whitespace-nowrap"
         >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" />
             </svg>
             Compare Selected ({selectedForComparison.length})
         </button>
 
-           {/* Push to Google Sheet Button */}
-           {onPushToGoogleSheet && (
+           {/* Auto-Push to Google Sheets Control */}
+           {setAutoPushToSheet && (
              <button
-               onClick={onPushToGoogleSheet}
-               className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 bg-green-600 border border-transparent text-white hover:bg-green-700 focus:ring-green-500"
-               title="Push to Google Sheet"
+               onClick={() => setAutoPushToSheet(!autoPushToSheet)}
+               className={`flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 whitespace-nowrap ${
+                 autoPushToSheet 
+                   ? 'bg-green-600 border border-transparent text-white hover:bg-green-700 focus:ring-green-500' 
+                   : 'bg-gray-100 border border-gray-300 text-gray-700 hover:bg-gray-200 focus:ring-gray-400'
+               }`}
+               title={autoPushToSheet ? 'Auto-push to Google Sheets: ON (click to disable)' : 'Auto-push to Google Sheets: OFF (click to enable)'}
              >
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-               </svg>
-               Push to Google Sheet
+               {autoPushToSheet ? (
+                 <>
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                   </svg>
+                   <span>Auto-CRM: ON</span>
+                 </>
+               ) : (
+                 <>
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                   </svg>
+                   <span>Auto-CRM: OFF</span>
+                 </>
+               )}
              </button>
            )}
 
-           {/* Email Button with Dropdown */}
+           {/* Email Button with Dropdown - No Scroll Issues */}
            {(onSendEmailToClient || onSendEmailToManager) && (
              <div className="relative" ref={emailMenuRef}>
                <button
                  onClick={() => setShowEmailMenu(!showEmailMenu)}
-                 className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 bg-blue-600 border border-transparent text-white hover:bg-blue-700 focus:ring-blue-500"
+                 className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 bg-blue-600 border border-transparent text-white hover:bg-blue-700 focus:ring-blue-500 whitespace-nowrap"
                  title="Send Email"
                >
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                  </svg>
                  Email
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 ml-1 transition-transform ${showEmailMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                  </svg>
                </button>
                {showEmailMenu && (
-                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border-2 border-gray-200 rounded-lg shadow-xl z-50 min-w-[200px]">
+                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[100] min-w-[200px]">
                    {onSendEmailToClient && (
                      <button
                        onClick={() => {
                          onSendEmailToClient();
                          setShowEmailMenu(false);
                        }}
-                       className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors first:rounded-t-lg border-b border-gray-200"
+                       className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-blue-50 transition-colors first:rounded-t-xl border-b border-gray-200"
                      >
                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                        </svg>
-                       <span className="font-medium text-gray-700">Email Client</span>
+                       <span className="font-semibold text-gray-800">Email Client</span>
                      </button>
                    )}
                    {onSendEmailToManager && (
@@ -166,12 +185,12 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
                          onSendEmailToManager();
                          setShowEmailMenu(false);
                        }}
-                       className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors last:rounded-b-lg"
+                       className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-purple-50 transition-colors last:rounded-b-xl"
                      >
                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                        </svg>
-                       <span className="font-medium text-gray-700">Email Manager</span>
+                       <span className="font-semibold text-gray-800">Email Manager</span>
                      </button>
                    )}
                  </div>
@@ -183,10 +202,10 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
            {onClear && (
              <button
                onClick={onClear}
-               className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 bg-red-600 border border-transparent text-white hover:bg-red-700 focus:ring-red-500"
+               className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 bg-red-600 border border-transparent text-white hover:bg-red-700 focus:ring-red-500 whitespace-nowrap"
                title="Clear all recommendations and client data"
              >
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                </svg>
                Clear Recommendations
@@ -195,7 +214,7 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
          </div>
       </div>
 
-      <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
+      <div className="space-y-3">
         {recommendations.length > 0 ? (
                 recommendedCommunities.map((community, index) => {
                   const rec = findRecByName(community.name);
@@ -211,37 +230,37 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
                   if(availability === 'Available Soon') availabilityColor = 'bg-yellow-100 text-yellow-700';
 
                   return (
-                    <div key={index} className={`border p-4 rounded-lg transition-all duration-300 relative ${isPartner ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'} ${isSelected ? 'shadow-lg ring-2 ring-offset-2 ring-offset-white ring-blue-500 border-blue-500' : 'hover:border-gray-300 hover:shadow-md'}`}>
+                    <div key={index} className={`border p-3 rounded-lg transition-all duration-300 relative ${isPartner ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'} ${isSelected ? 'shadow-lg ring-2 ring-offset-2 ring-offset-white ring-blue-500 border-blue-500' : 'hover:border-gray-300 hover:shadow-md'}`}>
                       <div className="flex justify-between items-start">
-                          <h3 className="font-bold text-gray-800 text-lg flex items-center pr-24">
+                          <h3 className="font-bold text-gray-800 text-base flex items-center pr-20">
                             <input 
                                   type="checkbox"
-                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-3 cursor-pointer"
+                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2 cursor-pointer"
                                   checked={isSelected}
                                   onChange={() => handleSelectForComparison(rec.name)}
                                   disabled={!isSelected && selectedForComparison.length >= 2}
                               />
                               {rec.name}
                           </h3>
-                          {isPartner && <div className="absolute top-4 right-4"><PartnerBadge /></div>}
+                          {isPartner && <div className="absolute top-3 right-3"><PartnerBadge /></div>}
                       </div>
                       
-                      <p className="text-gray-500 mt-1 text-sm ml-7">{rec.reason}</p>
+                      <p className="text-gray-500 mt-1 text-xs ml-6">{rec.reason}</p>
 
-                      <div className="mt-4 pt-3 border-t border-gray-200/80 text-sm space-y-2 ml-7">
+                      <div className="mt-3 pt-2 border-t border-gray-200/80 text-xs space-y-1.5 ml-6">
                         <div className="flex items-center">
-                          <span className="font-semibold w-28 text-gray-500">Availability:</span>
+                          <span className="font-semibold w-24 text-gray-500">Availability:</span>
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${availabilityColor}`}>{availability}</span>
                         </div>
                         {rec.price && (
                           <p className="text-gray-700 flex items-center">
-                              <span className="font-semibold w-28 text-gray-500">Price:</span>
+                              <span className="font-semibold w-24 text-gray-500">Price:</span>
                               <span>{rec.price}</span>
                           </p>
                         )}
                         {rec.careLevels && rec.careLevels.length > 0 && (
                           <p className="text-gray-700 flex items-center">
-                              <span className="font-semibold w-28 text-gray-500">Care Levels:</span>
+                              <span className="font-semibold w-24 text-gray-500">Care Levels:</span>
                               <span className="flex flex-wrap gap-1">
                                   {rec.careLevels.map(level => <span key={level} className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">{level}</span>)}
                               </span>
@@ -252,12 +271,12 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
                   )
                 })
         ) : (
-          <div className="text-center py-12 bg-gray-50/80 rounded-lg border-2 border-dashed border-gray-200">
-            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="text-center py-8 bg-gray-50/80 rounded-lg border-2 border-dashed border-gray-200">
+            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <p className="mt-2 text-gray-600 font-semibold">Awaiting Recommendations</p>
-            <p className="mt-1 text-gray-500 text-sm">Start a call to get AI-powered suggestions.</p>
+            <p className="mt-2 text-gray-600 font-semibold text-sm">Awaiting Recommendations</p>
+            <p className="mt-1 text-gray-500 text-xs">Start a call to get AI-powered suggestions.</p>
           </div>
         )}
       </div>

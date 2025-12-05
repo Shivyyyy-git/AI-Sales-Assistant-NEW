@@ -4,10 +4,13 @@ Automatically pushes recommendation data to Google Sheets for CRM workflow
 """
 
 import gspread
+import gspread.exceptions
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 from typing import Dict, Any, Optional
 import os
+import json
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,17 +30,30 @@ class GoogleSheetsCRM:
             spreadsheet_id: Google Spreadsheet ID (from URL)
             service_account_file: Path to service account JSON file
         """
-        # Get configuration from environment or parameters
-        self.spreadsheet_id = spreadsheet_id or os.getenv('GOOGLE_SPREADSHEET_ID')
-        self.service_account_file = service_account_file or os.getenv(
-            'GOOGLE_SERVICE_ACCOUNT_FILE',
-            'gen-lang-client-0663556503-72ee52ed113f.json'
-        )
+        # Hardcoded permanent configuration
+        DEFAULT_SPREADSHEET_ID = '1y3gAWKmK7wBOEZAPRistz1poyfvm9HFUMl1NzBaWQSY'
+        DEFAULT_SERVICE_ACCOUNT_FILE = 'capstone-project-478823-fe31a45bfcf6.json'
+        
+        # Get configuration from parameters, environment, or use defaults
+        self.spreadsheet_id = spreadsheet_id or os.getenv('GOOGLE_SPREADSHEET_ID') or DEFAULT_SPREADSHEET_ID
+        
+        # Resolve service account file path relative to backend directory
+        if service_account_file:
+            self.service_account_file = service_account_file
+        elif os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE'):
+            self.service_account_file = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
+        else:
+            # Make path relative to this file's directory (backend folder)
+            backend_dir = Path(__file__).parent
+            self.service_account_file = str(backend_dir / DEFAULT_SERVICE_ACCOUNT_FILE)
 
-        if not self.spreadsheet_id:
-            raise ValueError(
-                "GOOGLE_SPREADSHEET_ID not set. "
-                "Either pass it as parameter or set in .env file"
+        # No longer raise error if spreadsheet_id is missing - use default
+
+        # Verify service account file exists
+        if not os.path.exists(self.service_account_file):
+            raise FileNotFoundError(
+                f"Service account file not found: {self.service_account_file}\n"
+                f"Please ensure the file exists in the backend directory."
             )
 
         # Set up credentials and authenticate
@@ -46,13 +62,73 @@ class GoogleSheetsCRM:
             'https://www.googleapis.com/auth/drive'
         ]
 
-        self.creds = Credentials.from_service_account_file(
-            self.service_account_file,
-            scopes=self.scopes
-        )
+        try:
+            self.creds = Credentials.from_service_account_file(
+                self.service_account_file,
+                scopes=self.scopes
+            )
+        except Exception as e:
+            error_msg = str(e)
+            if 'invalid_grant' in error_msg.lower() or 'jwt' in error_msg.lower():
+                # Extract service account email from JSON file for better error message
+                try:
+                    with open(self.service_account_file, 'r') as f:
+                        sa_data = json.load(f)
+                        sa_email = sa_data.get('client_email', 'unknown')
+                    raise ValueError(
+                        f"Invalid service account credentials. The JWT signature is invalid.\n"
+                        f"Service Account Email: {sa_email}\n"
+                        f"Possible solutions:\n"
+                        f"1. Regenerate the service account key in Google Cloud Console\n"
+                        f"2. Ensure the spreadsheet is shared with: {sa_email}\n"
+                        f"3. Verify the service account key file is not corrupted\n"
+                        f"Original error: {error_msg}"
+                    )
+                except (json.JSONDecodeError, KeyError):
+                    raise ValueError(
+                        f"Invalid service account credentials. The JWT signature is invalid.\n"
+                        f"Please regenerate the service account key in Google Cloud Console.\n"
+                        f"Original error: {error_msg}"
+                    )
+            else:
+                raise
 
-        self.client = gspread.authorize(self.creds)
-        self.spreadsheet = self.client.open_by_key(self.spreadsheet_id)
+        try:
+            self.client = gspread.authorize(self.creds)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to authorize with Google Sheets API: {str(e)}\n"
+                f"Please check your service account credentials."
+            )
+
+        try:
+            self.spreadsheet = self.client.open_by_key(self.spreadsheet_id)
+        except gspread.exceptions.SpreadsheetNotFound:
+            # Extract service account email for better error message
+            try:
+                with open(self.service_account_file, 'r') as f:
+                    sa_data = json.load(f)
+                    sa_email = sa_data.get('client_email', 'unknown')
+                raise ValueError(
+                    f"Spreadsheet not found or access denied.\n"
+                    f"Spreadsheet ID: {self.spreadsheet_id}\n"
+                    f"Service Account Email: {sa_email}\n"
+                    f"Please ensure:\n"
+                    f"1. The spreadsheet exists and is accessible\n"
+                    f"2. The spreadsheet is shared with: {sa_email} (with Editor access)\n"
+                    f"3. The service account has proper permissions"
+                )
+            except (json.JSONDecodeError, KeyError):
+                raise ValueError(
+                    f"Spreadsheet not found or access denied.\n"
+                    f"Spreadsheet ID: {self.spreadsheet_id}\n"
+                    f"Please ensure the spreadsheet is shared with your service account."
+                )
+        except Exception as e:
+            raise ValueError(
+                f"Failed to open spreadsheet: {str(e)}\n"
+                f"Spreadsheet ID: {self.spreadsheet_id}"
+            )
 
         print(f"[OK] Connected to Google Sheets: {self.spreadsheet.title}")
 

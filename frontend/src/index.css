@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  font-size: 15px; /* Slightly smaller global scale */
   --background-light: #F8F7F2;
   --surface-color: #FFFFFF;
   --text-primary: #2d3748;
@@ -24,6 +25,105 @@ body {
   width: 100vw;
   overflow-y: auto;
 }
+
+@keyframes breath {
+  0% {
+    box-shadow: 0 20px 45px rgba(59, 130, 246, 0.18), 0 0 0 1px rgba(59, 130, 246, 0.05);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 28px 60px rgba(79, 70, 229, 0.26), 0 0 0 1px rgba(79, 70, 229, 0.08);
+    transform: scale(1.01);
+  }
+  100% {
+    box-shadow: 0 20px 45px rgba(59, 130, 246, 0.18), 0 0 0 1px rgba(59, 130, 246, 0.05);
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  50% { background-position: 100% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Subtle layered background: radial glow + faint grid */
+.page-bg-soft {
+  position: relative;
+  isolation: isolate;
+}
+
+.page-bg-soft::before,
+.page-bg-soft::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.page-bg-soft::before {
+  background: radial-gradient(520px at 20% 18%, rgba(79, 70, 229, 0.10), transparent 60%),
+              radial-gradient(440px at 78% 26%, rgba(59, 130, 246, 0.09), transparent 55%),
+              radial-gradient(560px at 50% 70%, rgba(14, 165, 233, 0.06), transparent 60%);
+  opacity: 0.75;
+}
+
+.page-bg-soft::after {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+  background-size: 64px 64px;
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+}
+
+.cta-start-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(59, 130, 246, 0.65);
+  background: linear-gradient(90deg, rgba(59,130,246,0.08), rgba(99,102,241,0.12), rgba(59,130,246,0.08));
+  background-size: 220% 100%;
+  color: #1d4ed8;
+  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  box-shadow: 0 14px 34px rgba(59, 130, 246, 0.24);
+  overflow: hidden;
+  transition: transform 240ms ease, box-shadow 240ms ease, border-color 240ms ease;
+  animation: shimmer 2.1s ease-in-out infinite;
+}
+
+.cta-start-pill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 50%, rgba(59,130,246,0.16), transparent 55%);
+  opacity: 0;
+  transition: opacity 240ms ease;
+  pointer-events: none;
+}
+
+.cta-start-pill:hover {
+  transform: translateY(-1px) scale(1.03);
+  box-shadow: 0 18px 40px rgba(59, 130, 246, 0.30);
+  border-color: rgba(59, 130, 246, 0.92);
+}
+
+.cta-start-pill:hover::after {
+  opacity: 1;
+}
+
+.cta-start-pill__label {
+  position: relative;
+  z-index: 1;
+}
+
 
 ::-webkit-scrollbar {
   width: 8px;

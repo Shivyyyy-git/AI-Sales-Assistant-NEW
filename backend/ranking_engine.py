@@ -907,16 +907,27 @@ class MultiLevelRankingEngine:
         top_candidates = self._select_top_candidates(communities, all_rankings, top_n=10)
         print(f"  [SELECTED] Top 10 candidates from {len(communities)} communities for AI ranking")
 
-        # Step 2: Execute AI rankings in parallel ONLY on top candidates
-        ai_rankers = ['availability', 'amenity']
+        # Step 2: Execute ALL AI rankings in PARALLEL on top candidates (OPTIMIZED)
+        # Run availability, amenity, and holistic simultaneously for 30-40s speed improvement
+        ai_rankers = ['availability', 'amenity', 'holistic']
 
-        print("[PHASE 2] Running AI-powered rankings on top 10 candidates (Gemini 2.5 Flash)...")
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            future_to_dimension = {
-                executor.submit(self.rankers[dim].rank, top_candidates, client_req): dim
-                for dim in ai_rankers
-            }
+        print("[PHASE 2] Running ALL AI rankings in parallel on top 10 candidates (Gemini 2.5 Flash)...")
+        print("  [OPTIMIZATION] All 3 AI calls running simultaneously for faster results...")
+        
+        # Prepare holistic ranker
+        holistic_ranker = HolisticRanker(weight=self.weights['holistic'])
+        
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_dimension = {}
+            
+            # Submit availability and amenity
+            for dim in ['availability', 'amenity']:
+                future_to_dimension[executor.submit(self.rankers[dim].rank, top_candidates, client_req)] = dim
+            
+            # Submit holistic (with rule-based rankings as context)
+            future_to_dimension[executor.submit(holistic_ranker.rank, top_candidates, client_req, all_rankings)] = 'holistic'
 
+            # Collect results as they complete
             for future in as_completed(future_to_dimension):
                 dimension = future_to_dimension[future]
                 try:
@@ -925,20 +936,10 @@ class MultiLevelRankingEngine:
                     print(f"  [OK] {dimension} ranking complete (AI)")
                 except Exception as e:
                     print(f"  [ERROR] {dimension} ranking failed: {e}")
-                    all_rankings[dimension] = self._fallback_ranking(communities, dimension)
+                    all_rankings[dimension] = self._fallback_ranking(communities if dimension != 'holistic' else top_candidates, dimension)
 
-        # Step 3: Holistic ranking ONLY on top candidates (needs context from previous rankings)
-        print("[PHASE 3] Running holistic AI ranking on top 10 candidates...")
-        holistic_ranker = HolisticRanker(weight=self.weights['holistic'])
-        try:
-            all_rankings['holistic'] = holistic_ranker.rank(top_candidates, client_req, all_rankings)
-            print("  [OK] holistic ranking complete (AI)")
-        except Exception as e:
-            print(f"  [ERROR] holistic ranking failed: {e}")
-            all_rankings['holistic'] = self._fallback_ranking(top_candidates, 'holistic')
-
-        # Step 4: Aggregate ranks using weighted Borda count ONLY for top candidates
-        print("[PHASE 4] Aggregating ranks using weighted Borda count...")
+        # Step 3: Aggregate ranks using weighted Borda count ONLY for top candidates
+        print("[PHASE 3] Aggregating ranks using weighted Borda count...")
         final_rankings = self._aggregate_ranks(top_candidates, all_rankings, client_req)
 
         # Sort by final rank

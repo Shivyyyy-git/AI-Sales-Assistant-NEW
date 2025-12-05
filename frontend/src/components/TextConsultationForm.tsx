@@ -3,11 +3,13 @@ import React, { useState } from 'react';
 interface TextConsultationFormProps {
   onResults: (results: Record<string, unknown>) => void;
   apiBaseUrl: string;
+  autoPushToSheet: boolean;
+  setAutoPushToSheet: (value: boolean) => void;
 }
 
 type ProcessingState = 'idle' | 'processing' | 'success' | 'error';
 
-export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onResults, apiBaseUrl }) => {
+export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onResults, apiBaseUrl, autoPushToSheet, setAutoPushToSheet }) => {
   const [text, setText] = useState('');
   const [language, setLanguage] = useState('english');
   const [processingState, setProcessingState] = useState<ProcessingState>('idle');
@@ -29,26 +31,43 @@ export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onRe
     }
 
     setProcessingState('processing');
-    setStatusMessage('Analyzing transcript with Gemini…');
+    
+    // Progress indicators for text processing
+    const progressSteps = [
+      { delay: 0, message: '📝 Analyzing transcript with Gemini AI...' },
+      { delay: 8000, message: '🎯 Extracting client requirements...' },
+      { delay: 15000, message: '⚡ Running intelligent ranking...' },
+      { delay: 30000, message: '🔄 Finalizing recommendations...' }
+    ];
+    
+    // Set up progress indicators
+    const timeouts: NodeJS.Timeout[] = [];
+    progressSteps.forEach(step => {
+      const timeout = setTimeout(() => {
+        if (processingState === 'processing') {
+          setStatusMessage(step.message);
+        }
+      }, step.delay);
+      timeouts.push(timeout);
+    });
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/process-text`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': import.meta.env.VITE_API_KEY || '',
         },
         body: JSON.stringify({
           text,
           language,
-          push_to_crm: true,
+          push_to_crm: autoPushToSheet,
         }),
       });
 
+      // Clear all progress timeouts
+      timeouts.forEach(t => clearTimeout(t));
+
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Authentication failed. Please check your API key configuration.');
-        }
         const details = await response.text();
         throw new Error(details || 'Processing failed');
       }
@@ -56,8 +75,11 @@ export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onRe
       const result = await response.json();
       onResults(result);
       setProcessingState('success');
-      setStatusMessage('Transcript processed successfully. Dashboard updated!');
+      setStatusMessage('✅ Transcript processed successfully. Dashboard updated!');
     } catch (error) {
+      // Clear all progress timeouts
+      timeouts.forEach(t => clearTimeout(t));
+      
       console.error('Processing failed:', error);
       setProcessingState('error');
       setStatusMessage(error instanceof Error ? error.message : 'Failed to process transcript. Please try again.');
@@ -114,6 +136,45 @@ export const TextConsultationForm: React.FC<TextConsultationFormProps> = ({ onRe
       </div>
 
       <div className="mt-4 space-y-3">
+        {/* Google Sheets Auto-Push Toggle */}
+        <div className="bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl p-4 border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">Auto-push to Google Sheets</h4>
+              <p className="text-xs text-gray-600">Automatically save consultation data to your CRM spreadsheet</p>
+            </div>
+            <button
+              onClick={() => setAutoPushToSheet(!autoPushToSheet)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                autoPushToSheet ? 'bg-green-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                  autoPushToSheet ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="mt-2">
+            {autoPushToSheet ? (
+              <p className="text-xs text-green-700 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Will save to Google Sheets
+              </p>
+            ) : (
+              <p className="text-xs text-amber-700 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Will NOT save to CRM
+              </p>
+            )}
+          </div>
+        </div>
+
         <button
           onClick={handleProcess}
           disabled={processingState === 'processing'}

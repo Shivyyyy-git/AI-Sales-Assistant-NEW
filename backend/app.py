@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from typing import Optional
+from pathlib import Path
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -32,8 +33,28 @@ CORS(app, resources={
     }
 })
 
+# Global error handler to ensure all errors return JSON
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Handle all exceptions and return JSON error responses"""
+    print(f"[ERROR] Unhandled exception: {e}")
+    import traceback
+    traceback.print_exc()
+    return jsonify({
+        'error': f'Internal server error: {str(e)}'
+    }), 500
+
 SUPPORTED_LANGUAGES = {'english', 'hindi', 'spanish'}
 DATA_FILE = os.getenv('DATA_FILE', 'DataFile_students_OPTIMIZED.xlsx')
+
+# Validate data file exists on startup
+if not Path(DATA_FILE).exists():
+    print(f"[ERROR] Data file not found: {DATA_FILE}")
+    print(f"[ERROR] Current working directory: {os.getcwd()}")
+    print(f"[ERROR] Please ensure the data file exists before starting the server.")
+    print(f"[ERROR] Expected path: {Path(DATA_FILE).absolute()}")
+    # Don't exit immediately - allow health check to work, but log error
+    print(f"[WARNING] Server will start but /api/communities and processing endpoints will fail until file is available.")
 
 recommendation_system: Optional[RankingBasedRecommendationSystem] = None
 
@@ -69,7 +90,8 @@ def process_text():
     system = get_system()
     result = system.process_text_input(text)
 
-    if data.get('push_to_crm', True) and os.getenv('GOOGLE_SPREADSHEET_ID'):
+    # Always push to CRM if enabled (using hardcoded spreadsheet)
+    if data.get('push_to_crm', True):
         try:
             crm_result = push_to_crm(result)
             result['crm_pushed'] = True
@@ -83,37 +105,48 @@ def process_text():
 
 @app.route('/api/process-audio', methods=['POST'])
 def process_audio():
-    if 'audio' not in request.files:
-        return jsonify({'error': 'Audio file is required'}), 400
+    try:
+        if 'audio' not in request.files:
+            return jsonify({'error': 'Audio file is required'}), 400
 
-    file = request.files['audio']
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+        file = request.files['audio']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
 
-    filename = secure_filename(file.filename)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    saved_name = f"{timestamp}_{filename}"
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], saved_name)
-    file.save(filepath)
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        saved_name = f"{timestamp}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], saved_name)
+        file.save(filepath)
 
-    language = request.form.get('language', 'english').lower()
-    if language not in SUPPORTED_LANGUAGES:
-        language = 'english'
+        language = request.form.get('language', 'english').lower()
+        if language not in SUPPORTED_LANGUAGES:
+            language = 'english'
 
-    system = get_system()
-    result = system.process_audio_file(filepath, language)
+        system = get_system()
+        result = system.process_audio_file(filepath, language)
 
-    push_to_sheets = request.form.get('push_to_crm', 'true').lower() == 'true'
-    if push_to_sheets and os.getenv('GOOGLE_SPREADSHEET_ID'):
-        try:
-            crm_result = push_to_crm(result)
-            result['crm_pushed'] = True
-            result['consultation_id'] = crm_result['consultation_id']
-        except Exception as exc:
-            result['crm_error'] = str(exc)
+        # Always push to CRM if enabled (using hardcoded spreadsheet)
+        push_to_sheets = request.form.get('push_to_crm', 'true').lower() == 'true'
+        if push_to_sheets:
+            try:
+                crm_result = push_to_crm(result)
+                result['crm_pushed'] = True
+                result['consultation_id'] = crm_result['consultation_id']
+            except Exception as exc:
+                result['crm_error'] = str(exc)
+                print(f"[WARNING] CRM push failed: {exc}")
 
-    result['language'] = language
-    return jsonify(result)
+        result['language'] = language
+        return jsonify(result)
+    
+    except Exception as e:
+        print(f"[ERROR] Audio processing failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Failed to process audio: {str(e)}'
+        }), 500
 
 
 @app.route('/api/communities', methods=['GET'])

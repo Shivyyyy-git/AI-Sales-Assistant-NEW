@@ -462,9 +462,10 @@ def send_email_manager():
 
 
 # Print startup info for debugging
+import sys
 print("=" * 60)
 print("🚀 AI Sales Assistant Backend Starting...")
-print(f"   Flask version: {Flask.__version__}")
+print(f"   Python version: {sys.version.split()[0]}")
 print(f"   Data file: {DATA_FILE}")
 print(f"   Data file exists: {Path(DATA_FILE).exists()}")
 print(f"   CORS origins: {allowed_origins}")

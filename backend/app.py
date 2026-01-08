@@ -461,6 +461,327 @@ def send_email_manager():
     return jsonify({'success': True, 'message': 'Email feature is currently disabled.'})
 
 
+# ============================================
+# CLIENT INTAKE ENDPOINTS (Neil's simplified flow)
+# ============================================
+
+@app.route('/api/analyze-intake', methods=['POST'])
+def analyze_intake():
+    """
+    Analyze client intake transcript and return:
+    - Structured profile (extracted fields)
+    - Follow-up questions for missing required info
+    """
+    try:
+        data = request.get_json() or {}
+        transcript = data.get('transcript', '')
+        
+        if not transcript:
+            return jsonify({'error': 'Transcript is required'}), 400
+        
+        # Use Gemini to analyze the transcript
+        from google import genai
+        from google.genai import types
+        import json
+        
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'API key not configured'}), 500
+        
+        client = genai.Client(api_key=api_key)
+        
+        analysis_prompt = f"""Analyze this client intake transcript for a senior living placement service.
+
+TRANSCRIPT:
+{transcript}
+
+Extract the following information and return as JSON:
+{{
+  "profile": {{
+    "name": "string or null if not mentioned",
+    "careLevel": "Independent Living | Assisted Living | Memory Care | null",
+    "medicalConditions": "string describing conditions or null",
+    "activitiesStruggling": "string describing activities or null",
+    "apartmentType": "Studio | 1-Bedroom | 2-Bedroom | Patio Home | null",
+    "locationPreference": "string describing area/neighborhood or null",
+    "budget": "string like '$5000' or '$4000-6000' or null",
+    "budgetFlexibility": "Firm | Flexible | null",
+    "timeline": "Immediate | 1-3 months | 3-6 months | 6+ months | null",
+    "mobilityNeeds": "string or null",
+    "specialRequests": "string or null"
+  }},
+  "followUpQuestions": [
+    {{
+      "id": "fieldName",
+      "question": "Natural question to ask",
+      "field": "fieldName"
+    }}
+  ]
+}}
+
+RULES:
+1. Only include follow-up questions for CRITICAL missing fields (name, careLevel, budget, timeline)
+2. Maximum 4 follow-up questions
+3. Make questions conversational and friendly
+4. If careLevel is not clear, always ask about it
+5. Return ONLY valid JSON, no markdown"""
+
+        response = client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=analysis_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.1,
+                response_mime_type="application/json"
+            )
+        )
+        
+        result_text = response.text if hasattr(response, 'text') and response.text else '{}'
+        
+        # Clean markdown if present
+        if result_text.strip().startswith('```'):
+            result_text = result_text.strip()
+            if result_text.startswith('```json'):
+                result_text = result_text[7:]
+            elif result_text.startswith('```'):
+                result_text = result_text[3:]
+            if result_text.endswith('```'):
+                result_text = result_text[:-3]
+            result_text = result_text.strip()
+        
+        parsed = json.loads(result_text)
+        
+        return jsonify({
+            'success': True,
+            'profile': parsed.get('profile', {}),
+            'followUpQuestions': parsed.get('followUpQuestions', [])
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] analyze-intake failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/submit-intake', methods=['POST'])
+def submit_intake():
+    """
+    Submit completed client intake:
+    - Push to Google Sheets CRM
+    - Generate ranked recommendations
+    - Send email notification to team
+    """
+    try:
+        data = request.get_json() or {}
+        
+        submission_id = data.get('submissionId', f'INTAKE-{int(datetime.now().timestamp())}')
+        transcript = data.get('transcript', '')
+        profile = data.get('structuredProfile', {})
+        follow_ups = data.get('followUpAnswers', [])
+        team_email = data.get('teamEmail') or os.getenv('TEAM_NOTIFICATION_EMAIL')
+        timestamp = data.get('timestamp', datetime.now().isoformat())
+        
+        print(f"[INTAKE] Processing submission {submission_id}")
+        print(f"[INTAKE] Profile: {profile}")
+        
+        # Step 1: Generate recommendations using the ranking system
+        recommendations = []
+        try:
+            system = get_system()
+            
+            # Convert profile to the format expected by the ranking system
+            client_text = f"""
+            Client Name: {profile.get('name', 'Unknown')}
+            Care Level Needed: {profile.get('careLevel', 'Unknown')}
+            Medical Conditions: {profile.get('medicalConditions', 'Not specified')}
+            Activities Struggling With: {profile.get('activitiesStruggling', 'Not specified')}
+            Apartment Type: {profile.get('apartmentType', 'Any')}
+            Location Preference: {profile.get('locationPreference', 'Flexible')}
+            Budget: {profile.get('budget', 'Not specified')}
+            Budget Flexibility: {profile.get('budgetFlexibility', 'Unknown')}
+            Timeline: {profile.get('timeline', 'Flexible')}
+            Mobility Needs: {profile.get('mobilityNeeds', 'None specified')}
+            Special Requests: {profile.get('specialRequests', 'None')}
+            """
+            
+            result = system.process_text_input(client_text)
+            recommendations = result.get('recommendations', [])[:5]  # Top 5
+            print(f"[INTAKE] Generated {len(recommendations)} recommendations")
+        except Exception as rec_error:
+            print(f"[WARNING] Could not generate recommendations: {rec_error}")
+        
+        # Step 2: Push to Google Sheets CRM
+        try:
+            crm_data = {
+                'client_info': {
+                    'client_name': profile.get('name', 'Unknown'),
+                    'budget': parse_budget(profile.get('budget', '0')),
+                    'location_preference': profile.get('locationPreference', ''),
+                    'care_level': profile.get('careLevel', ''),
+                    'timeline': profile.get('timeline', ''),
+                    'special_needs': {
+                        'medical': profile.get('medicalConditions', ''),
+                        'mobility': profile.get('mobilityNeeds', ''),
+                        'other': profile.get('specialRequests', '')
+                    },
+                    'source': 'client-self-service-intake',
+                    'submission_id': submission_id,
+                },
+                'recommendations': recommendations,
+                'performance_metrics': {
+                    'timings': {'e2e_total': 0},
+                    'costs': {'total_cost': 0}
+                }
+            }
+            
+            crm_result = push_to_crm(crm_data)
+            print(f"[INTAKE] Pushed to CRM: consultation #{crm_result.get('consultation_id')}")
+        except Exception as crm_error:
+            print(f"[WARNING] CRM push failed: {crm_error}")
+        
+        # Step 3: Send email notification (if configured)
+        email_sent = False
+        if team_email:
+            try:
+                email_sent = send_intake_email(
+                    to_email=team_email,
+                    submission_id=submission_id,
+                    transcript=transcript,
+                    profile=profile,
+                    follow_ups=follow_ups,
+                    recommendations=recommendations,
+                    timestamp=timestamp
+                )
+            except Exception as email_error:
+                print(f"[WARNING] Email notification failed: {email_error}")
+        
+        return jsonify({
+            'success': True,
+            'submissionId': submission_id,
+            'recommendationsCount': len(recommendations),
+            'emailSent': email_sent,
+            'message': 'Intake submitted successfully'
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] submit-intake failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+def parse_budget(budget_str):
+    """Parse budget string to integer"""
+    if not budget_str:
+        return 0
+    import re
+    # Extract first number from string like "$5000" or "$4,000-6,000"
+    match = re.search(r'[\d,]+', str(budget_str).replace(',', ''))
+    if match:
+        return int(match.group().replace(',', ''))
+    return 0
+
+
+def send_intake_email(to_email, submission_id, transcript, profile, follow_ups, recommendations, timestamp):
+    """
+    Send email notification to team with intake summary.
+    Uses SendGrid if configured, otherwise logs to console.
+    """
+    sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
+    from_email = os.getenv('SENDGRID_FROM_EMAIL', 'noreply@seniorlivingadvisor.com')
+    
+    # Build email content
+    subject = f"🏠 New Client Intake: {profile.get('name', 'Unknown')} [{submission_id}]"
+    
+    # Build recommendations section
+    recs_text = ""
+    if recommendations:
+        recs_text = "\n\n📋 RECOMMENDED COMMUNITIES:\n" + "-" * 40 + "\n"
+        for i, rec in enumerate(recommendations, 1):
+            name = rec.get('community_name', rec.get('name', f'Community {i}'))
+            fee = rec.get('key_metrics', {}).get('monthly_fee', 'N/A')
+            reason = rec.get('explanations', {}).get('holistic_reason', rec.get('reason', 'Good match'))
+            recs_text += f"\n{i}. {name}\n   💰 ${fee}/month\n   ✨ {reason}\n"
+    
+    # Build follow-up answers section
+    followup_text = ""
+    if follow_ups:
+        followup_text = "\n\n❓ FOLLOW-UP ANSWERS:\n" + "-" * 40 + "\n"
+        for fu in follow_ups:
+            followup_text += f"\nQ: {fu.get('question', 'Unknown')}\nA: {fu.get('answer', 'No answer')}\n"
+    
+    email_body = f"""
+================================================================================
+                    NEW CLIENT INTAKE SUBMISSION
+================================================================================
+
+📅 Submitted: {timestamp}
+🔖 Reference: {submission_id}
+
+================================================================================
+                         CLIENT PROFILE
+================================================================================
+
+👤 Name: {profile.get('name', 'Not provided')}
+🏥 Care Level: {profile.get('careLevel', 'Not specified')}
+💰 Budget: {profile.get('budget', 'Not specified')} ({profile.get('budgetFlexibility', 'flexibility unknown')})
+📍 Location: {profile.get('locationPreference', 'Flexible')}
+🗓️ Timeline: {profile.get('timeline', 'Not specified')}
+🏠 Apartment Type: {profile.get('apartmentType', 'Not specified')}
+🩺 Medical Conditions: {profile.get('medicalConditions', 'Not specified')}
+♿ Mobility Needs: {profile.get('mobilityNeeds', 'None specified')}
+📝 Special Requests: {profile.get('specialRequests', 'None')}
+{followup_text}
+{recs_text}
+
+================================================================================
+                         FULL TRANSCRIPT
+================================================================================
+
+{transcript}
+
+================================================================================
+                         ACTION REQUIRED
+================================================================================
+
+Please contact the client within 24 hours to:
+1. Confirm the information above is correct
+2. Discuss the recommended communities
+3. Schedule tours if interested
+
+================================================================================
+"""
+    
+    if sendgrid_api_key:
+        try:
+            import sendgrid
+            from sendgrid.helpers.mail import Mail
+            
+            sg = sendgrid.SendGridAPIClient(api_key=sendgrid_api_key)
+            message = Mail(
+                from_email=from_email,
+                to_emails=to_email,
+                subject=subject,
+                plain_text_content=email_body
+            )
+            response = sg.send(message)
+            print(f"[EMAIL] Sent to {to_email}, status: {response.status_code}")
+            return True
+        except Exception as e:
+            print(f"[EMAIL] SendGrid error: {e}")
+            # Fall through to logging
+    
+    # If no SendGrid, log the email content
+    print("\n" + "=" * 60)
+    print(f"[EMAIL] Would send to: {to_email}")
+    print(f"[EMAIL] Subject: {subject}")
+    print("[EMAIL] Body preview (first 500 chars):")
+    print(email_body[:500] + "...")
+    print("=" * 60 + "\n")
+    
+    return False
+
+
 # Print startup info for debugging
 import sys
 print("=" * 60)

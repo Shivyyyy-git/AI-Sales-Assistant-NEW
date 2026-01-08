@@ -16,6 +16,10 @@ import { TextConsultationForm } from './components/TextConsultationForm';
 import { ManualEntryModal } from './components/ManualEntryModal';
 import { RecommendationAnalysisModal } from './components/RecommendationAnalysisModal';
 import { USERS_DATA } from './data/users.data';
+import { ClientLandingPage } from './components/ClientLandingPage';
+
+// Calendly URL - configure this for Neil's account
+const CALENDLY_URL = import.meta.env.VITE_CALENDLY_URL || 'https://calendly.com/your-username/consultation';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const DEBUG = import.meta.env.DEV; // Enable debug logging only in development
@@ -197,6 +201,34 @@ const createBlob = (data: Float32Array): Blob => {
 };
 
 export default function App() {
+  // Check URL hash for client mode routing
+  // /#/client → Client self-service landing page (no password)
+  // Default → Agent dashboard (password protected)
+  const [isClientMode, setIsClientMode] = useState(() => {
+    return window.location.hash === '#/client' || window.location.hash === '#client';
+  });
+
+  // Listen for hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      setIsClientMode(hash === '#/client' || hash === '#client');
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // If client mode, render the simplified client landing page
+  if (isClientMode) {
+    return (
+      <ClientLandingPage 
+        calendlyUrl={CALENDLY_URL}
+        companyName="Senior Living Advisors"
+      />
+    );
+  }
+
+  // Agent mode continues below...
   const [currentUser] = useState<User>(DEFAULT_USER);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [hasLaunchedAssistant, setHasLaunchedAssistant] = useState(false);

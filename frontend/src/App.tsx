@@ -217,16 +217,39 @@ export default function App() {
 
   // If client mode, render the simplified client intake page
   if (isClientMode) {
+    const calendlyUrl = import.meta.env.VITE_CALENDLY_URL || 'https://calendly.com/your-username/consultation';
+    
     const handleIntakeComplete = async (transcript: string, data: any) => {
       // Intake completion is handled by the backend endpoint
       // which sends email notification automatically
       console.log('Client intake completed:', { transcript, data });
     };
 
+    const handleCallbackRequest = async (phone: string, clientName: string) => {
+      // Send callback request to backend
+      try {
+        await fetch(`${API_BASE_URL}/api/process-client-intake`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callbackRequest: true,
+            phone: phone,
+            clientName: clientName,
+            priority: 'ASAP',
+          }),
+        });
+      } catch (error) {
+        console.error('Failed to submit callback request:', error);
+        throw error;
+      }
+    };
+
     return (
       <ClientIntakePage 
         companyName="Senior Living Advisors"
+        calendlyUrl={calendlyUrl}
         onComplete={handleIntakeComplete}
+        onCallbackRequest={handleCallbackRequest}
       />
     );
   }

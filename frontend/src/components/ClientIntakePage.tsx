@@ -1,11 +1,14 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { AudioUploadForm } from './AudioUploadForm';
+import { CalendlyButton } from './CalendlyEmbed';
 
 type IntakeStep = 'initial' | 'reviewing' | 'followup' | 'completed';
 
 interface ClientIntakePageProps {
   companyName?: string;
+  calendlyUrl?: string;
   onComplete: (transcript: string, clientData: any) => Promise<void>;
+  onCallbackRequest?: (phone: string, clientName: string) => Promise<void>;
 }
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -18,7 +21,9 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''
  */
 export const ClientIntakePage: React.FC<ClientIntakePageProps> = ({
   companyName = "Senior Living Advisors",
+  calendlyUrl = import.meta.env.VITE_CALENDLY_URL || 'https://calendly.com/your-username/consultation',
   onComplete,
+  onCallbackRequest,
 }) => {
   const [step, setStep] = useState<IntakeStep>('initial');
   const [inputMethod, setInputMethod] = useState<'text' | 'audio'>('text');
@@ -27,7 +32,14 @@ export const ClientIntakePage: React.FC<ClientIntakePageProps> = ({
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
   const [followUpAnswers, setFollowUpAnswers] = useState<Record<string, string>>({});
   const [clientTranscript, setClientTranscript] = useState('');
+  const [clientName, setClientName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  
+  // Callback request state
+  const [showCallbackOption, setShowCallbackOption] = useState(false);
+  const [callbackPhone, setCallbackPhone] = useState('');
+  const [isSubmittingCallback, setIsSubmittingCallback] = useState(false);
+  const [callbackSubmitted, setCallbackSubmitted] = useState(false);
 
   // Guidelines for what to include
   const guidelines = [
@@ -78,6 +90,11 @@ export const ClientIntakePage: React.FC<ClientIntakePageProps> = ({
       
       setClientTranscript(transcript);
       
+      // Extract client name if available
+      if (data.clientInfo?.name) {
+        setClientName(data.clientInfo.name);
+      }
+      
       // Check if follow-up questions are needed
       if (data.followUpQuestions && data.followUpQuestions.length > 0) {
         setFollowUpQuestions(data.followUpQuestions);
@@ -108,6 +125,11 @@ export const ClientIntakePage: React.FC<ClientIntakePageProps> = ({
 
       setClientTranscript(transcript);
 
+      // Extract client name if available from audio result
+      if (result.client_info?.client_name) {
+        setClientName(result.client_info.client_name);
+      }
+
       // Send to backend for AI review
       const response = await fetch(`${API_BASE_URL}/api/process-client-intake`, {
         method: 'POST',
@@ -124,6 +146,11 @@ export const ClientIntakePage: React.FC<ClientIntakePageProps> = ({
       }
 
       const data = await response.json();
+      
+      // Extract client name if available from backend response
+      if (data.clientInfo?.name) {
+        setClientName(data.clientInfo.name);
+      }
       
       // Check if follow-up questions are needed
       if (data.followUpQuestions && data.followUpQuestions.length > 0) {
@@ -176,6 +203,12 @@ export const ClientIntakePage: React.FC<ClientIntakePageProps> = ({
       }
 
       const data = await response.json();
+      
+      // Extract client name if available
+      if (data.clientInfo?.name) {
+        setClientName(data.clientInfo.name);
+      }
+      
       await handleComplete(fullTranscript, data);
     } catch (err) {
       console.error('Follow-up submission error:', err);
@@ -405,26 +438,195 @@ export const ClientIntakePage: React.FC<ClientIntakePageProps> = ({
     );
   }
 
+  // Handle callback request
+  const handleCallbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!callbackPhone.trim()) {
+      setError('Please enter your phone number');
+      return;
+    }
+
+    setIsSubmittingCallback(true);
+    setError(null);
+
+    try {
+      if (onCallbackRequest) {
+        await onCallbackRequest(callbackPhone.trim(), clientName || 'Client');
+      } else {
+        // Default: send to backend
+        await fetch(`${API_BASE_URL}/api/process-client-intake`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callbackRequest: true,
+            phone: callbackPhone.trim(),
+            clientName: clientName || 'Client',
+            priority: 'ASAP',
+          }),
+        });
+      }
+      setCallbackSubmitted(true);
+    } catch (err) {
+      console.error('Callback request error:', err);
+      setError('Failed to submit callback request. Please try again.');
+    } finally {
+      setIsSubmittingCallback(false);
+    }
+  };
+
   // Completion Screen
   if (step === 'completed') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl border border-gray-100 p-8 md:p-12 text-center">
-          <div className="w-20 h-20 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 py-8 px-4">
+        <div className="max-w-3xl mx-auto">
+          {/* Success Message */}
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 md:p-12 text-center mb-6">
+            <div className="w-20 h-20 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Thank You{clientName ? `, ${clientName}` : ''}!</h2>
+            <p className="text-lg text-gray-600 mb-2">
+              We've received your information and our team will review it carefully.
+            </p>
+            <p className="text-lg font-semibold text-gray-900 mb-8">
+              We'll be in touch with personalized options within the next 24 hours.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-gray-700">
+              <p>💡 <strong>What happens next?</strong></p>
+              <p className="mt-2">One of our senior living advisors will contact you to confirm we have all the information correct, explain your options, and help you schedule tours of communities that interest you.</p>
+            </div>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Thank You!</h2>
-          <p className="text-lg text-gray-600 mb-2">
-            We've received your information and our team will review it carefully.
-          </p>
-          <p className="text-lg font-semibold text-gray-900 mb-8">
-            We'll be in touch with personalized options within the next 24 hours.
-          </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-gray-700">
-            <p>💡 <strong>What happens next?</strong></p>
-            <p className="mt-2">One of our senior living advisors will contact you to confirm we have all the information correct, explain your options, and help you schedule tours of communities that interest you.</p>
+
+          {/* CTA Options */}
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+            <h3 className="text-xl font-bold text-gray-900 mb-6 text-center">
+              Choose How You'd Like to Connect
+            </h3>
+
+            <div className="space-y-4">
+              {/* Calendly Option */}
+              {calendlyUrl && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="text-left">
+                      <h4 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                        📅 Schedule a Time
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        Book a consultation at a time that works for you
+                      </p>
+                    </div>
+                    <CalendlyButton
+                      url={calendlyUrl}
+                      text="View Availability"
+                      prefill={{ name: clientName }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Divider */}
+              {(calendlyUrl && !callbackSubmitted) && (
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-200"></div>
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="px-4 bg-white text-sm text-gray-500">or</span>
+                  </div>
+                </div>
+              )}
+
+              {/* ASAP Callback Option */}
+              {!callbackSubmitted ? (
+                showCallbackOption ? (
+                  <form onSubmit={handleCallbackSubmit} className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        📞 Request Immediate Callback
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCallbackOption(false);
+                          setError(null);
+                        }}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      We'll call you as soon as possible (usually within the hour during business hours).
+                    </p>
+                    
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phone Number *
+                      </label>
+                      <input
+                        type="tel"
+                        value={callbackPhone}
+                        onChange={(e) => setCallbackPhone(e.target.value)}
+                        placeholder="(555) 123-4567"
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-colors"
+                        required
+                      />
+                    </div>
+
+                    {error && (
+                      <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        {error}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingCallback || !callbackPhone.trim()}
+                      className="w-full py-3 px-6 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors disabled:cursor-not-allowed"
+                    >
+                      {isSubmittingCallback ? 'Submitting...' : 'Request Callback'}
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => setShowCallbackOption(true)}
+                    className="w-full flex items-center justify-between p-6 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <span className="text-gray-900 font-semibold block">📞 Request Immediate Callback</span>
+                        <p className="text-xs text-gray-500">We'll call you ASAP (usually within the hour)</p>
+                      </div>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )
+              ) : (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
+                  <div className="w-12 h-12 mx-auto mb-3 bg-green-100 rounded-full flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Callback Request Received!</h4>
+                  <p className="text-sm text-gray-600">
+                    We'll call you at <strong>{callbackPhone}</strong> as soon as possible.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

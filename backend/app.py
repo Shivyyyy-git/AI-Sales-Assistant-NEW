@@ -181,9 +181,49 @@ def process_client_intake():
     2. Check for missing required fields
     3. Generate follow-up questions if needed OR
     4. Generate recommendations and send email if complete
+    5. Handle callback requests (ASAP callback option)
     """
     try:
         data = request.get_json() or {}
+        
+        # Handle callback request (separate flow)
+        if data.get('callbackRequest'):
+            phone = data.get('phone', '').strip()
+            client_name = data.get('clientName', 'Client')
+            priority = data.get('priority', 'ASAP')
+            
+            if not phone:
+                return jsonify({'error': 'Phone number is required'}), 400
+            
+            # Send callback request email
+            email_service = get_email_service()
+            email_sent = email_service.send_intake_notification(
+                transcript=f"Client requested immediate callback.\n\nPhone: {phone}\nPriority: {priority}",
+                client_info={'name': client_name, 'phone': phone, 'callback_request': True},
+                recommendations=[],
+                summary={'callback_priority': priority, 'requested_at': datetime.now().isoformat()}
+            )
+            
+            # Also log to Google Sheets if possible
+            try:
+                push_to_crm({
+                    'client_info': {
+                        'client_name': client_name,
+                        'phone': phone,
+                        'callback_request': True,
+                    },
+                    'recommendations': [],
+                    'performance_metrics': {'timings': {}, 'costs': {}}
+                })
+            except:
+                pass  # Non-critical
+            
+            return jsonify({
+                'success': True,
+                'emailSent': email_sent,
+                'message': 'Callback request received. We\'ll contact you ASAP.'
+            })
+        
         initial_input = data.get('initialInput', '').strip()
         input_method = data.get('inputMethod', 'text')
         follow_up_answers = data.get('followUpAnswers', {})

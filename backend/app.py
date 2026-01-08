@@ -32,23 +32,55 @@ frontend_origin = os.getenv("FRONTEND_ORIGIN")
 if frontend_origin and frontend_origin not in allowed_origins:
     allowed_origins.append(frontend_origin)
 
+# Allow all Render subdomains for flexibility during deployment
+import re
+def cors_origin_callback(origin):
+    if not origin:
+        return True
+    # Allow localhost
+    if origin.startswith('http://localhost'):
+        return True
+    # Allow any Render subdomain
+    if re.match(r'https://[\w-]+\.onrender\.com$', origin):
+        return True
+    # Check explicit list
+    return origin in allowed_origins
+
 CORS(app, 
-     origins=allowed_origins,
+     origins=cors_origin_callback,
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      allow_headers=["Content-Type", "Authorization"],
      supports_credentials=True,
      expose_headers=["Content-Type"])
 
-# Global error handler to ensure all errors return JSON
+# Handle preflight OPTIONS requests explicitly to prevent CORS issues during cold starts
+@app.before_request
+def handle_preflight():
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        origin = request.headers.get('Origin', '')
+        if cors_origin_callback(origin):
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
+
+# Global error handler to ensure all errors return JSON with CORS headers
 @app.errorhandler(Exception)
 def handle_exception(e):
     """Handle all exceptions and return JSON error responses"""
     print(f"[ERROR] Unhandled exception: {e}")
     import traceback
     traceback.print_exc()
-    return jsonify({
+    response = jsonify({
         'error': f'Internal server error: {str(e)}'
-    }), 500
+    })
+    # Ensure CORS headers are present even on errors
+    origin = request.headers.get('Origin', '')
+    if cors_origin_callback(origin):
+        response.headers['Access-Control-Allow-Origin'] = origin
+    return response, 500
 
 SUPPORTED_LANGUAGES = {'english', 'hindi', 'spanish'}
 DATA_FILE = os.getenv('DATA_FILE', 'DataFile_students_OPTIMIZED.xlsx')

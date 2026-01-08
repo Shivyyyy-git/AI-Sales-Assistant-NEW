@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 from main_pipeline_ranking import RankingBasedRecommendationSystem
 from google_sheets_integration import push_to_crm
 from csv_processor import CSVProcessor
+from email_service import get_email_service
+from gemini_audio_processor import GeminiAudioProcessor
+import json
 
 load_dotenv()
 
@@ -32,55 +35,23 @@ frontend_origin = os.getenv("FRONTEND_ORIGIN")
 if frontend_origin and frontend_origin not in allowed_origins:
     allowed_origins.append(frontend_origin)
 
-# Allow all Render subdomains for flexibility during deployment
-import re
-def cors_origin_callback(origin):
-    if not origin:
-        return True
-    # Allow localhost
-    if origin.startswith('http://localhost'):
-        return True
-    # Allow any Render subdomain
-    if re.match(r'https://[\w-]+\.onrender\.com$', origin):
-        return True
-    # Check explicit list
-    return origin in allowed_origins
-
 CORS(app, 
-     origins=cors_origin_callback,
+     origins=allowed_origins,
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      allow_headers=["Content-Type", "Authorization"],
      supports_credentials=True,
      expose_headers=["Content-Type"])
 
-# Handle preflight OPTIONS requests explicitly to prevent CORS issues during cold starts
-@app.before_request
-def handle_preflight():
-    if request.method == 'OPTIONS':
-        response = app.make_default_options_response()
-        origin = request.headers.get('Origin', '')
-        if cors_origin_callback(origin):
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-        return response
-
-# Global error handler to ensure all errors return JSON with CORS headers
+# Global error handler to ensure all errors return JSON
 @app.errorhandler(Exception)
 def handle_exception(e):
     """Handle all exceptions and return JSON error responses"""
     print(f"[ERROR] Unhandled exception: {e}")
     import traceback
     traceback.print_exc()
-    response = jsonify({
+    return jsonify({
         'error': f'Internal server error: {str(e)}'
-    })
-    # Ensure CORS headers are present even on errors
-    origin = request.headers.get('Origin', '')
-    if cors_origin_callback(origin):
-        response.headers['Access-Control-Allow-Origin'] = origin
-    return response, 500
+    }), 500
 
 SUPPORTED_LANGUAGES = {'english', 'hindi', 'spanish'}
 DATA_FILE = os.getenv('DATA_FILE', 'DataFile_students_OPTIMIZED.xlsx')
@@ -199,6 +170,186 @@ def process_audio():
         traceback.print_exc()
         return jsonify({
             'error': f'Failed to process audio: {str(e)}'
+        }), 500
+
+
+@app.route('/api/process-client-intake', methods=['POST'])
+def process_client_intake():
+    """
+    Process client intake submission (simplified flow)
+    1. Extract structured client info from initial input
+    2. Check for missing required fields
+    3. Generate follow-up questions if needed OR
+    4. Generate recommendations and send email if complete
+    """
+    try:
+        data = request.get_json() or {}
+        initial_input = data.get('initialInput', '').strip()
+        input_method = data.get('inputMethod', 'text')
+        follow_up_answers = data.get('followUpAnswers', {})
+        is_complete = data.get('complete', False)
+        client_info_from_audio = data.get('clientInfo', {})
+
+        if not initial_input and not client_info_from_audio:
+            return jsonify({'error': 'No input provided'}), 400
+
+        processor = GeminiAudioProcessor()
+        
+        # Combine initial input and follow-up answers
+        full_text = initial_input
+        if follow_up_answers:
+            follow_up_text = '\n\n=== Follow-up Questions ===\n'
+            for q, a in follow_up_answers.items():
+                follow_up_text += f'Q: {q}\nA: {a}\n\n'
+            full_text += follow_up_text
+
+        # Extract structured client information
+        try:
+            client_data = processor.process_text_input(full_text)
+        except Exception as e:
+            print(f"[ERROR] Failed to extract client info: {e}")
+            # Fallback: use info from audio if available
+            client_data = client_info_from_audio
+
+        # Required fields for recommendations
+        required_fields = {
+            'care_level': 'Type of care needed (Independent Living, Assisted Living, Memory Care)',
+            'location_preference': 'Location preference (ZIP code or city/area)',
+            'budget': 'Monthly budget range',
+            'timeline': 'Timeline for moving (immediate, near-term, flexible)',
+        }
+
+        # Check which fields are missing
+        missing_fields = []
+        for field, description in required_fields.items():
+            value = client_data.get(field) or client_data.get(field.replace('_', '_'))
+            if not value or value == 'null':
+                missing_fields.append(description)
+
+        # If not complete, return follow-up questions
+        if not is_complete and missing_fields:
+            # Generate follow-up questions for missing fields
+            follow_up_prompt = f"""Based on the client's initial input below, generate 2-3 specific, friendly follow-up questions to gather the missing information. 
+
+Client's initial input:
+{initial_input[:500]}
+
+Missing information needed:
+{', '.join(missing_fields[:3])}
+
+Generate questions that are:
+- Natural and conversational (not robotic)
+- Easy to understand for older adults
+- Specific to what's missing
+
+Return ONLY a JSON array of question strings, like: ["Question 1", "Question 2", "Question 3"]
+Do not include any other text or explanation."""
+
+            try:
+                from google import genai
+                from google.genai import types
+                client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+                response = client.models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents=follow_up_prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,
+                        response_mime_type="application/json"
+                    )
+                )
+                
+                questions_text = response.text
+                if questions_text.strip().startswith('```'):
+                    questions_text = questions_text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
+                
+                questions = json.loads(questions_text)
+                if not isinstance(questions, list):
+                    questions = [questions] if isinstance(questions, str) else []
+            except Exception as e:
+                print(f"[ERROR] Failed to generate follow-up questions: {e}")
+                # Fallback questions
+                questions = [
+                    f"What type of care is needed? ({', '.join([desc.split('(')[-1].rstrip(')') for desc in missing_fields[:1]])})",
+                    "What's your preferred location or area of the city?",
+                    "What's your monthly budget range for housing?"
+                ]
+
+            return jsonify({
+                'followUpQuestions': questions[:3],  # Max 3 questions
+                'clientInfo': client_data,
+            })
+
+        # Complete - generate recommendations and send email
+        system = get_system()
+        
+        # Process the full transcript to get recommendations
+        result = system.process_text_input(full_text)
+        
+        # Format recommendations for email
+        recommendations = []
+        if 'recommendations' in result and result['recommendations']:
+            for rec in result['recommendations'][:10]:  # Top 10
+                recommendations.append({
+                    'name': rec.get('community_name', 'Unknown'),
+                    'final_rank': rec.get('final_rank', 0),
+                    'key_metrics': rec.get('key_metrics', {}),
+                    'explanations': rec.get('explanations', {}),
+                })
+
+        # Prepare client info for email
+        client_info = {
+            'name': client_data.get('client_name') or 'Not provided',
+            'budget': f"${client_data.get('budget', 0):,}/month" if client_data.get('budget') else 'Not specified',
+            'location': client_data.get('location_preference') or 'Not specified',
+            'care_level': client_data.get('care_level') or 'Not specified',
+            'timeline': client_data.get('timeline') or 'Not specified',
+            'special_needs': client_data.get('special_needs', {}).get('other') or 'None',
+        }
+
+        # Generate summary
+        summary = {
+            'care_type': client_info['care_level'],
+            'location': client_info['location'],
+            'budget_range': client_info['budget'],
+            'urgency': client_info['timeline'],
+            'total_recommendations': len(recommendations),
+        }
+
+        # Send email notification
+        email_service = get_email_service()
+        email_sent = email_service.send_intake_notification(
+            transcript=full_text,
+            client_info=client_info,
+            recommendations=recommendations,
+            summary=summary
+        )
+
+        # Also push to Google Sheets CRM
+        try:
+            crm_result = push_to_crm(result)
+            crm_pushed = True
+            consultation_id = crm_result.get('consultation_id')
+        except Exception as exc:
+            print(f"[WARNING] CRM push failed: {exc}")
+            crm_pushed = False
+            consultation_id = None
+
+        return jsonify({
+            'success': True,
+            'clientInfo': client_info,
+            'recommendations': recommendations,
+            'summary': summary,
+            'emailSent': email_sent,
+            'crmPushed': crm_pushed,
+            'consultationId': consultation_id,
+        })
+
+    except Exception as e:
+        print(f"[ERROR] Client intake processing failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Failed to process intake: {str(e)}'
         }), 500
 
 
@@ -491,327 +642,6 @@ def send_email_client():
 @app.route('/api/send-email-manager', methods=['POST'])
 def send_email_manager():
     return jsonify({'success': True, 'message': 'Email feature is currently disabled.'})
-
-
-# ============================================
-# CLIENT INTAKE ENDPOINTS (Neil's simplified flow)
-# ============================================
-
-@app.route('/api/analyze-intake', methods=['POST'])
-def analyze_intake():
-    """
-    Analyze client intake transcript and return:
-    - Structured profile (extracted fields)
-    - Follow-up questions for missing required info
-    """
-    try:
-        data = request.get_json() or {}
-        transcript = data.get('transcript', '')
-        
-        if not transcript:
-            return jsonify({'error': 'Transcript is required'}), 400
-        
-        # Use Gemini to analyze the transcript
-        from google import genai
-        from google.genai import types
-        import json
-        
-        api_key = os.getenv('GEMINI_API_KEY')
-        if not api_key:
-            return jsonify({'error': 'API key not configured'}), 500
-        
-        client = genai.Client(api_key=api_key)
-        
-        analysis_prompt = f"""Analyze this client intake transcript for a senior living placement service.
-
-TRANSCRIPT:
-{transcript}
-
-Extract the following information and return as JSON:
-{{
-  "profile": {{
-    "name": "string or null if not mentioned",
-    "careLevel": "Independent Living | Assisted Living | Memory Care | null",
-    "medicalConditions": "string describing conditions or null",
-    "activitiesStruggling": "string describing activities or null",
-    "apartmentType": "Studio | 1-Bedroom | 2-Bedroom | Patio Home | null",
-    "locationPreference": "string describing area/neighborhood or null",
-    "budget": "string like '$5000' or '$4000-6000' or null",
-    "budgetFlexibility": "Firm | Flexible | null",
-    "timeline": "Immediate | 1-3 months | 3-6 months | 6+ months | null",
-    "mobilityNeeds": "string or null",
-    "specialRequests": "string or null"
-  }},
-  "followUpQuestions": [
-    {{
-      "id": "fieldName",
-      "question": "Natural question to ask",
-      "field": "fieldName"
-    }}
-  ]
-}}
-
-RULES:
-1. Only include follow-up questions for CRITICAL missing fields (name, careLevel, budget, timeline)
-2. Maximum 4 follow-up questions
-3. Make questions conversational and friendly
-4. If careLevel is not clear, always ask about it
-5. Return ONLY valid JSON, no markdown"""
-
-        response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
-            contents=analysis_prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.1,
-                response_mime_type="application/json"
-            )
-        )
-        
-        result_text = response.text if hasattr(response, 'text') and response.text else '{}'
-        
-        # Clean markdown if present
-        if result_text.strip().startswith('```'):
-            result_text = result_text.strip()
-            if result_text.startswith('```json'):
-                result_text = result_text[7:]
-            elif result_text.startswith('```'):
-                result_text = result_text[3:]
-            if result_text.endswith('```'):
-                result_text = result_text[:-3]
-            result_text = result_text.strip()
-        
-        parsed = json.loads(result_text)
-        
-        return jsonify({
-            'success': True,
-            'profile': parsed.get('profile', {}),
-            'followUpQuestions': parsed.get('followUpQuestions', [])
-        })
-        
-    except Exception as e:
-        print(f"[ERROR] analyze-intake failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/submit-intake', methods=['POST'])
-def submit_intake():
-    """
-    Submit completed client intake:
-    - Push to Google Sheets CRM
-    - Generate ranked recommendations
-    - Send email notification to team
-    """
-    try:
-        data = request.get_json() or {}
-        
-        submission_id = data.get('submissionId', f'INTAKE-{int(datetime.now().timestamp())}')
-        transcript = data.get('transcript', '')
-        profile = data.get('structuredProfile', {})
-        follow_ups = data.get('followUpAnswers', [])
-        team_email = data.get('teamEmail') or os.getenv('TEAM_NOTIFICATION_EMAIL')
-        timestamp = data.get('timestamp', datetime.now().isoformat())
-        
-        print(f"[INTAKE] Processing submission {submission_id}")
-        print(f"[INTAKE] Profile: {profile}")
-        
-        # Step 1: Generate recommendations using the ranking system
-        recommendations = []
-        try:
-            system = get_system()
-            
-            # Convert profile to the format expected by the ranking system
-            client_text = f"""
-            Client Name: {profile.get('name', 'Unknown')}
-            Care Level Needed: {profile.get('careLevel', 'Unknown')}
-            Medical Conditions: {profile.get('medicalConditions', 'Not specified')}
-            Activities Struggling With: {profile.get('activitiesStruggling', 'Not specified')}
-            Apartment Type: {profile.get('apartmentType', 'Any')}
-            Location Preference: {profile.get('locationPreference', 'Flexible')}
-            Budget: {profile.get('budget', 'Not specified')}
-            Budget Flexibility: {profile.get('budgetFlexibility', 'Unknown')}
-            Timeline: {profile.get('timeline', 'Flexible')}
-            Mobility Needs: {profile.get('mobilityNeeds', 'None specified')}
-            Special Requests: {profile.get('specialRequests', 'None')}
-            """
-            
-            result = system.process_text_input(client_text)
-            recommendations = result.get('recommendations', [])[:5]  # Top 5
-            print(f"[INTAKE] Generated {len(recommendations)} recommendations")
-        except Exception as rec_error:
-            print(f"[WARNING] Could not generate recommendations: {rec_error}")
-        
-        # Step 2: Push to Google Sheets CRM
-        try:
-            crm_data = {
-                'client_info': {
-                    'client_name': profile.get('name', 'Unknown'),
-                    'budget': parse_budget(profile.get('budget', '0')),
-                    'location_preference': profile.get('locationPreference', ''),
-                    'care_level': profile.get('careLevel', ''),
-                    'timeline': profile.get('timeline', ''),
-                    'special_needs': {
-                        'medical': profile.get('medicalConditions', ''),
-                        'mobility': profile.get('mobilityNeeds', ''),
-                        'other': profile.get('specialRequests', '')
-                    },
-                    'source': 'client-self-service-intake',
-                    'submission_id': submission_id,
-                },
-                'recommendations': recommendations,
-                'performance_metrics': {
-                    'timings': {'e2e_total': 0},
-                    'costs': {'total_cost': 0}
-                }
-            }
-            
-            crm_result = push_to_crm(crm_data)
-            print(f"[INTAKE] Pushed to CRM: consultation #{crm_result.get('consultation_id')}")
-        except Exception as crm_error:
-            print(f"[WARNING] CRM push failed: {crm_error}")
-        
-        # Step 3: Send email notification (if configured)
-        email_sent = False
-        if team_email:
-            try:
-                email_sent = send_intake_email(
-                    to_email=team_email,
-                    submission_id=submission_id,
-                    transcript=transcript,
-                    profile=profile,
-                    follow_ups=follow_ups,
-                    recommendations=recommendations,
-                    timestamp=timestamp
-                )
-            except Exception as email_error:
-                print(f"[WARNING] Email notification failed: {email_error}")
-        
-        return jsonify({
-            'success': True,
-            'submissionId': submission_id,
-            'recommendationsCount': len(recommendations),
-            'emailSent': email_sent,
-            'message': 'Intake submitted successfully'
-        })
-        
-    except Exception as e:
-        print(f"[ERROR] submit-intake failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-
-def parse_budget(budget_str):
-    """Parse budget string to integer"""
-    if not budget_str:
-        return 0
-    import re
-    # Extract first number from string like "$5000" or "$4,000-6,000"
-    match = re.search(r'[\d,]+', str(budget_str).replace(',', ''))
-    if match:
-        return int(match.group().replace(',', ''))
-    return 0
-
-
-def send_intake_email(to_email, submission_id, transcript, profile, follow_ups, recommendations, timestamp):
-    """
-    Send email notification to team with intake summary.
-    Uses SendGrid if configured, otherwise logs to console.
-    """
-    sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
-    from_email = os.getenv('SENDGRID_FROM_EMAIL', 'noreply@seniorlivingadvisor.com')
-    
-    # Build email content
-    subject = f"🏠 New Client Intake: {profile.get('name', 'Unknown')} [{submission_id}]"
-    
-    # Build recommendations section
-    recs_text = ""
-    if recommendations:
-        recs_text = "\n\n📋 RECOMMENDED COMMUNITIES:\n" + "-" * 40 + "\n"
-        for i, rec in enumerate(recommendations, 1):
-            name = rec.get('community_name', rec.get('name', f'Community {i}'))
-            fee = rec.get('key_metrics', {}).get('monthly_fee', 'N/A')
-            reason = rec.get('explanations', {}).get('holistic_reason', rec.get('reason', 'Good match'))
-            recs_text += f"\n{i}. {name}\n   💰 ${fee}/month\n   ✨ {reason}\n"
-    
-    # Build follow-up answers section
-    followup_text = ""
-    if follow_ups:
-        followup_text = "\n\n❓ FOLLOW-UP ANSWERS:\n" + "-" * 40 + "\n"
-        for fu in follow_ups:
-            followup_text += f"\nQ: {fu.get('question', 'Unknown')}\nA: {fu.get('answer', 'No answer')}\n"
-    
-    email_body = f"""
-================================================================================
-                    NEW CLIENT INTAKE SUBMISSION
-================================================================================
-
-📅 Submitted: {timestamp}
-🔖 Reference: {submission_id}
-
-================================================================================
-                         CLIENT PROFILE
-================================================================================
-
-👤 Name: {profile.get('name', 'Not provided')}
-🏥 Care Level: {profile.get('careLevel', 'Not specified')}
-💰 Budget: {profile.get('budget', 'Not specified')} ({profile.get('budgetFlexibility', 'flexibility unknown')})
-📍 Location: {profile.get('locationPreference', 'Flexible')}
-🗓️ Timeline: {profile.get('timeline', 'Not specified')}
-🏠 Apartment Type: {profile.get('apartmentType', 'Not specified')}
-🩺 Medical Conditions: {profile.get('medicalConditions', 'Not specified')}
-♿ Mobility Needs: {profile.get('mobilityNeeds', 'None specified')}
-📝 Special Requests: {profile.get('specialRequests', 'None')}
-{followup_text}
-{recs_text}
-
-================================================================================
-                         FULL TRANSCRIPT
-================================================================================
-
-{transcript}
-
-================================================================================
-                         ACTION REQUIRED
-================================================================================
-
-Please contact the client within 24 hours to:
-1. Confirm the information above is correct
-2. Discuss the recommended communities
-3. Schedule tours if interested
-
-================================================================================
-"""
-    
-    if sendgrid_api_key:
-        try:
-            import sendgrid
-            from sendgrid.helpers.mail import Mail
-            
-            sg = sendgrid.SendGridAPIClient(api_key=sendgrid_api_key)
-            message = Mail(
-                from_email=from_email,
-                to_emails=to_email,
-                subject=subject,
-                plain_text_content=email_body
-            )
-            response = sg.send(message)
-            print(f"[EMAIL] Sent to {to_email}, status: {response.status_code}")
-            return True
-        except Exception as e:
-            print(f"[EMAIL] SendGrid error: {e}")
-            # Fall through to logging
-    
-    # If no SendGrid, log the email content
-    print("\n" + "=" * 60)
-    print(f"[EMAIL] Would send to: {to_email}")
-    print(f"[EMAIL] Subject: {subject}")
-    print("[EMAIL] Body preview (first 500 chars):")
-    print(email_body[:500] + "...")
-    print("=" * 60 + "\n")
-    
-    return False
 
 
 # Print startup info for debugging

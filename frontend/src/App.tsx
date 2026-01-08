@@ -16,14 +16,7 @@ import { TextConsultationForm } from './components/TextConsultationForm';
 import { ManualEntryModal } from './components/ManualEntryModal';
 import { RecommendationAnalysisModal } from './components/RecommendationAnalysisModal';
 import { USERS_DATA } from './data/users.data';
-import { ClientLandingPage } from './components/ClientLandingPage';
 import { ClientIntakePage } from './components/ClientIntakePage';
-
-// Calendly URL - configure this for Neil's account (used in live call mode)
-const CALENDLY_URL = import.meta.env.VITE_CALENDLY_URL || 'https://calendly.com/your-username/consultation';
-
-// Team notification email for intake submissions
-const TEAM_EMAIL = import.meta.env.VITE_TEAM_EMAIL || '';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const DEBUG = import.meta.env.DEV; // Enable debug logging only in development
@@ -205,49 +198,35 @@ const createBlob = (data: Float32Array): Blob => {
 };
 
 export default function App() {
-  // Check URL hash for routing
-  // /#/intake → Simplified client intake (Neil's preferred flow - text/voice input, follow-ups, email)
-  // /#/client → Live AI conversation mode (Calendly booking)
+  // Check URL hash for client mode routing
+  // /#/client → Client self-service landing page (no password)
   // Default → Agent dashboard (password protected)
-  const [routeMode, setRouteMode] = useState<'agent' | 'intake' | 'client'>(() => {
-    const hash = window.location.hash;
-    if (hash === '#/intake' || hash === '#intake') return 'intake';
-    if (hash === '#/client' || hash === '#client') return 'client';
-    return 'agent';
+  const [isClientMode, setIsClientMode] = useState(() => {
+    return window.location.hash === '#/client' || window.location.hash === '#client';
   });
 
   // Listen for hash changes
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
-      if (hash === '#/intake' || hash === '#intake') {
-        setRouteMode('intake');
-      } else if (hash === '#/client' || hash === '#client') {
-        setRouteMode('client');
-      } else {
-        setRouteMode('agent');
-      }
+      setIsClientMode(hash === '#/client' || hash === '#client');
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Simplified intake mode (Neil's preferred flow)
-  if (routeMode === 'intake') {
+  // If client mode, render the simplified client intake page
+  if (isClientMode) {
+    const handleIntakeComplete = async (transcript: string, data: any) => {
+      // Intake completion is handled by the backend endpoint
+      // which sends email notification automatically
+      console.log('Client intake completed:', { transcript, data });
+    };
+
     return (
       <ClientIntakePage 
         companyName="Senior Living Advisors"
-        teamEmail={TEAM_EMAIL}
-      />
-    );
-  }
-
-  // Live AI conversation mode (original client flow)
-  if (routeMode === 'client') {
-    return (
-      <ClientLandingPage 
-        calendlyUrl={CALENDLY_URL}
-        companyName="Senior Living Advisors"
+        onComplete={handleIntakeComplete}
       />
     );
   }

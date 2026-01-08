@@ -92,9 +92,9 @@ const INITIAL_SILENCE_TRACKER: SilenceTracker = { lastAudioTime: 0, silenceStart
 
 const AUDIO_BUFFER_SIZE = 1024;
 const MIN_SPEECH_THRESHOLD = 0.0012; // Reduced sensitivity to avoid picking up background noise
-const MAX_SILENCE_BEFORE_DROP = 2200;
-const END_TURN_SILENCE_MS = 900; // 900ms (0.9 seconds) allows natural pauses in speech
-const END_TURN_CONFIRMATION_MS = 200; // Send endOfTurn confirmation window
+const MAX_SILENCE_BEFORE_DROP = 2500; // Increased to allow more natural pauses
+const END_TURN_SILENCE_MS = 1500; // 1.5 seconds - gives users more time to think without triggering AI response
+const END_TURN_CONFIRMATION_MS = 300; // Slightly longer confirmation window for smoother turn-taking
 type EnhancedMediaTrackConstraints = MediaTrackConstraints & { voiceIsolation?: boolean };
 type MediaTrackSupportedConstraintsWithVoiceIsolation = MediaTrackSupportedConstraints & { voiceIsolation?: boolean };
 
@@ -220,6 +220,7 @@ export default function App() {
   const isAiMutedRef = useRef(false);
   const isAgentAssistMode = isAiMuted;
   const [isCallPaused, setIsCallPaused] = useState(false);
+  const [isAiThinking, setIsAiThinking] = useState(false); // Tracks when AI is processing a function call
   const selectedLanguage: SupportedLanguage = 'en'; // English only - locked, no other languages allowed
   const [clientProfile, setClientProfile] = useState<ClientProfile>({});
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -559,12 +560,12 @@ When not already provided, naturally gather:
 - If they seem unsure → Be patient and guide them gently through what you need to know
 - If they're in a hurry → Be efficient while staying warm and helpful
 
-**DASHBOARD UPDATES (Behind the Scenes) - REAL-TIME & INSTANT:**
-- Call \`updateDashboard\` IMMEDIATELY when you learn ANY new piece of information, no matter how small
-- Update fields INCREMENTALLY as you gather them - don't batch or wait to collect multiple fields
-- You MUST call \`updateDashboard\` MULTIPLE times during a conversation as you learn new details
-- Example flow: Client says location → update dashboard NOW. Client says budget → update dashboard NOW again.
-- Update \`clientProfile\` with new details field-by-field: name, location, budget, care level, timeline, special needs
+**DASHBOARD UPDATES (Behind the Scenes):**
+- Call \`updateDashboard\` ONLY after you finish speaking your complete response, NOT while speaking
+- IMPORTANT: Do NOT interrupt your speech to update the dashboard - finish talking first, then update
+- Batch multiple pieces of information into a SINGLE update call (e.g., if client shares name, location, and budget, update all three in one call)
+- Aim for 1-2 dashboard updates per conversation exchange, NOT multiple rapid updates
+- Update \`clientProfile\` with all new details gathered in that exchange: name, location, budget, care level, timeline, special needs
 - Provide \`suggestedQuestions\` (2-3 questions) for missing information
 - Generate \`communityRecommendations\` ONLY when you have ALL 4 KEY PIECES of information:
   1. Budget (monthly budget range)
@@ -575,7 +576,7 @@ When not already provided, naturally gather:
   - CRITICAL: Use exact community names from the knowledge base (e.g., "Community 12345")
 - Provide \`agentGuidance\` with helpful coaching tips for the human agent
 - NEVER mention the dashboard or technical terms to the client
-- Remember: INSTANT updates = better user experience. Update as soon as you learn each detail!
+- CRITICAL FOR SMOOTH EXPERIENCE: Fewer, batched updates = smoother conversation flow
 
 **RECOMMENDATIONS:**
 - Generate recommendations ONLY once you have ALL 4 required pieces: budget, location, care type, and timeline
@@ -662,6 +663,7 @@ ${communitiesListString}`, [selectedLanguage, languageNames, communitiesListStri
       setSuggestedQuestions([]);
       setAgentGuidance([]);
       setAnalysisResults(null);
+      setIsAiThinking(false);
       applyTranscriptionSnapshot([]);
       resetAudioTracking();
   }, [applyTranscriptionSnapshot, resetAudioTracking]);
@@ -1393,6 +1395,8 @@ ${currentUser.name}`;
             }
 
             if (message.toolCall?.functionCalls) {
+              // Show thinking indicator while processing function calls
+              setIsAiThinking(true);
               for (const fc of message.toolCall.functionCalls) {
                 if (fc.name === 'updateDashboard' && fc.args) {
                   const {
@@ -1466,6 +1470,8 @@ ${currentUser.name}`;
                   }
                 }
               }
+              // Hide thinking indicator after all function calls processed
+              setIsAiThinking(false);
             }
             // User (client) transcription - just pass through, Google sends accumulated text
             if (message.serverContent?.inputTranscription?.text) {
@@ -1656,6 +1662,7 @@ ${currentUser.name}`;
     
     setIsCallPaused(false);
     isCallPausedRef.current = false;
+    setIsAiThinking(false);
     
     resetAudioTracking();
     resetTranscriptionTracking();
@@ -2915,7 +2922,18 @@ ${currentUser.name}`;
                 autoPushToSheet={autoPushToSheet}
                 setAutoPushToSheet={setAutoPushToSheet}
               />
-              <div className="min-h-0 h-[500px] rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+              <div className="min-h-0 h-[500px] rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden relative">
+                {/* AI Thinking Indicator */}
+                {isAiThinking && callStatus === CallStatus.ACTIVE && (
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-full px-3 py-1 shadow-sm animate-pulse">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                    <span className="text-xs font-medium text-blue-600">Updating...</span>
+                  </div>
+                )}
                 <div className="h-full overflow-y-auto pr-1">
                   <TranscriptionPanel 
                     entries={transcription} 

@@ -9,7 +9,7 @@
 ![Google Gemini](https://img.shields.io/badge/Google_Gemini_2.5-4285F4?style=for-the-badge&logo=google&logoColor=white)
 
 **Enterprise-grade AI assistant for senior living placement professionals**  
-Real-time conversations • Intelligent matching • Automated CRM • Secure & scalable
+Real-time conversations • Intelligent matching • Automated CRM • Scalable
 
 🌐 [Live Demo](#) • 📖 [Documentation](#-quick-start) • 🚀 [Deploy to Render](#-deployment-to-render)
 
@@ -20,13 +20,6 @@ Real-time conversations • Intelligent matching • Automated CRM • Secure & 
 ## 📸 **Application Screenshots**
 
 <div align="center">
-
-### **🔐 Secure Access**
-<img src="screenshots/password-security.png" alt="Password-protected login screen" width="800">
-
-*Enterprise-grade password protection ensures secure access to sensitive client data*
-
----
 
 ### **🏠 Professional Landing Page**
 <img src="screenshots/main-landing.png" alt="Main landing page with consultation options" width="800">
@@ -56,7 +49,7 @@ Real-time conversations • Intelligent matching • Automated CRM • Secure & 
 🎙️ **Live AI Conversations** - Natural, real-time consultations powered by Google Gemini 2.5 Flash  
 🧠 **8-Dimensional Matching** - Advanced algorithm considering budget, location, care needs, and more  
 📈 **Automated CRM** - Instant Google Sheets integration for seamless lead management  
-🔒 **Enterprise Security** - Password protection, secure API access, and encrypted data handling  
+🔒 **Enterprise Security** - Secure API access and encrypted data handling  
 ⚡ **Ultra-Responsive** - <150ms transcription latency for natural conversation flow
 
 ---
@@ -94,7 +87,6 @@ Real-time conversations • Intelligent matching • Automated CRM • Secure & 
 - **Export-Ready Reports** - Client summaries formatted for follow-up
 
 ### **🔒 Security & Compliance**
-- **Password Protection** - Secure application access
 - **Environment Variables** - Sensitive data never committed to Git
 - **CORS Security** - Proper origin validation for API access
 - **Service Account Auth** - Secure Google Cloud integration
@@ -168,7 +160,6 @@ cd frontend && npm install && cd ..
    ```bash
    VITE_API_BASE_URL=http://localhost:5050
    VITE_GEMINI_API_KEY=your_gemini_api_key_here
-   VITE_APP_PASSWORD=your_secure_password
    ```
 
 ### **Start Development Servers**
@@ -250,14 +241,12 @@ FRONTEND_ORIGIN=https://your-frontend.onrender.com
 ```bash
 VITE_GEMINI_API_KEY=your_key
 VITE_API_BASE_URL=https://your-backend.onrender.com
-VITE_APP_PASSWORD=your_password
 ```
 
 ### **Step 4: Deploy & Verify**
 
 - ✅ Backend health: `https://your-backend.onrender.com/api/health`
 - ✅ Frontend loads: `https://your-frontend.onrender.com`
-- ✅ Password protection works
 - ✅ Consultations process correctly
 - ✅ CRM logging functions
 
@@ -358,18 +347,15 @@ cat .env
 - `.env` files
 - Service account JSON files
 - API keys
-- Passwords
 
 ### **✅ Always Use Environment Variables:**
 - `GEMINI_API_KEY`
 - `GOOGLE_SERVICE_ACCOUNT_JSON`
-- `VITE_APP_PASSWORD`
 - All credentials and secrets
 
 ### **🔒 Production Checklist:**
 - Enable HTTPS
 - Set proper CORS origins
-- Use strong passwords
 - Rotate API keys regularly
 - Monitor access logs
 
@@ -379,7 +365,6 @@ cat .env
 
 - 📁 [Service Account Setup](backend/REGENERATE_SERVICE_ACCOUNT.md)
 - 🔧 [Enable Google APIs](backend/ENABLE_APIS.md)
-- 🚀 [Deployment Guide](DEPLOYMENT_PASSWORD.md)
 - 📊 [View Live CRM](https://docs.google.com/spreadsheets/d/1y3gAWKmK7wBOEZAPRistz1poyfvm9HFUMl1NzBaWQSY/edit?gid=911061880#gid=911061880)
 
 ---
